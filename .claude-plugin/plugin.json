@@ -1,0 +1,10 @@
+{
+  "name": "antibody",
+  "version": "0.1.0",
+  "description": "Catches Claude's own tool failures, stalls and repeat mistakes, hands back known fixes at the moment of failure, and learns rules that stop them recurring.",
+  "author": { "name": "Michael Lee Hobbs" },
+  "homepage": "https://github.com/MichaelLeeHobbs/antibody",
+  "repository": "https://github.com/MichaelLeeHobbs/antibody",
+  "license": "MIT",
+  "keywords": ["hooks", "guards", "self-healing", "failures", "reliability"]
+}

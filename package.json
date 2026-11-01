@@ -1,0 +1,13 @@
+{
+  "name": "antibody",
+  "version": "0.1.0",
+  "description": "A Claude Code plugin that catches Claude's own tool failures and stalls, hands back known fixes, and learns rules that stop them recurring.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "bin": { "antibody": "bin/antibody.mjs" },
+  "scripts": {
+    "test": "node test/run.mjs"
+  }
+}
