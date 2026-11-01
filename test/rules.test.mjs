@@ -9,7 +9,8 @@ process.env.ANTIBODY_HOME = h.env.ANTIBODY_HOME;
 process.env.CLAUDE_CONFIG_DIR = h.env.CLAUDE_CONFIG_DIR;
 const { compile, evaluate, loadRules, makeContext, testRule } = await import('../lib/rules.mjs');
 
-const ctx = (command, tool = 'Bash', extra = {}) => makeContext({ tool, input: { command }, cwd: '/repo', ...extra });
+// Pin the platform so OS-scoped rules behave the same on every CI runner.
+const ctx = (command, tool = 'Bash', extra = {}) => makeContext({ tool, input: { command }, cwd: '/repo', platform: 'linux', ...extra });
 
 test('every shipped rule passes its own cases', async () => {
   const { rules, errors } = await loadRules({ packs: ['core', 'git-bash-windows', 'windows-orphans'], rulesDir: null, guardsDir: null });
@@ -61,7 +62,7 @@ test('evaluate: shadow rules only report; rewrites apply before denies; scope fi
   const b = evaluate(ctx('tail -5 a b'), rules);
   assert.equal(b.command, 'tail -n 5 a b');
   assert.equal(b.decision, null, 'the rewritten command no longer trips the deny');
-  const c = evaluate(makeContext({ tool: 'Bash', input: { command: 'pnpm turbo run x' }, cwd: 'D:\\src\\web-app' }), rules);
+  const c = evaluate(makeContext({ tool: 'Bash', input: { command: 'pnpm turbo run x' }, cwd: 'D:\\src\\web-app', platform: 'linux' }), rules);
   assert.deepEqual(c.notes, ['[portal-only] no turbo here']);
   assert.equal(evaluate(ctx('ls', 'Bash', { platform: 'win32' }), rules).decision, 'deny');
 });
