@@ -1,0 +1,11 @@
+{
+  "name": "antibody",
+  "owner": { "name": "Michael Lee Hobbs" },
+  "plugins": [
+    {
+      "name": "antibody",
+      "source": "./",
+      "description": "Learn from Claude's own tool failures and stop them recurring."
+    }
+  ]
+}
