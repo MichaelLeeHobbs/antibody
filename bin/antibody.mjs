@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // antibody's command line. Run with no arguments for the list of commands.
-import { cpSync, existsSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, ensureDir, paths } from '../lib/config.mjs';
 import { append, commandHead, isNoise, readEvents, signature } from '../lib/events.mjs';
@@ -342,16 +342,27 @@ async function main() {
       const file = paths().events;
       if (!existsSync(file)) return say('no events yet');
       const cut = days(keep);
-      const lines = readText(file).split('\n').filter(Boolean);
+      // Move the log aside first, in one rename. Hooks that append from now on start a fresh
+      // events.jsonl, so no line written during the rotation is lost; the recent lines from the
+      // old file are then appended back (readEvents orders by time, so their position is fine).
+      const work = file + `.rotating-${process.pid}`;
+      let moved = false;
+      for (let t = 0; t < 20 && !moved; t++) {
+        try { renameSync(file, work); moved = true; } catch (err) {
+          if (!['EBUSY', 'EPERM', 'EACCES'].includes(err.code)) throw err;
+          const until = Date.now() + 50; while (Date.now() < until); // a hook has the file open on Windows; retry
+        }
+      }
+      if (!moved) return fail('events.jsonl is busy; try again');
+      const lines = readText(work).split('\n').filter(Boolean);
       const old = [];
       const fresh = [];
       for (const l of lines) { let t; try { t = new Date(JSON.parse(l).ts); } catch { t = new Date(); } (t < cut ? old : fresh).push(l); }
-      if (!old.length) return say('nothing to rotate');
       const dest = join(paths().home, `events-${new Date().toISOString().slice(0, 10)}.jsonl`);
-      writeFileSync(dest, old.join('\n') + '\n', { flag: 'a' });
-      const tmp = file + '.rotate.tmp';
-      writeFileSync(tmp, fresh.length ? fresh.join('\n') + '\n' : '');
-      renameSync(tmp, file);
+      if (old.length) writeFileSync(dest, old.join('\n') + '\n', { flag: 'a' });
+      if (fresh.length) appendFileSync(file, fresh.join('\n') + '\n');
+      rmSync(work, { force: true });
+      if (!old.length) return say('nothing to rotate');
       say(`moved ${old.length} events older than ${keep} days to ${basename(dest)}`);
       return;
     }

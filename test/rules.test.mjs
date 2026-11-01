@@ -89,3 +89,10 @@ test('local data rules and guards load, and config overrides state', async () =>
   assert.equal(evaluate(ctx('run danger'), rules).decision, 'deny');
   h.done();
 });
+
+test('dropFlag leaves the rest of the command exactly as it was', () => {
+  const r = compile({ id: 'd', action: 'rewrite', match: { name: 'twg', hasFlag: '--id' }, rewrite: { dropFlag: '--id', keepValue: true } });
+  assert.equal(r.check(ctx('twg get --id MED-1 --message "a  b"')).command, 'twg get MED-1 --message "a  b"');
+  const end = compile({ id: 'e', action: 'rewrite', match: { name: 'twg', hasFlag: '--json' }, rewrite: { dropFlag: '--json', keepValue: true } });
+  assert.equal(end.check(ctx('twg get "x  y" --json')).command, 'twg get "x  y"');
+});

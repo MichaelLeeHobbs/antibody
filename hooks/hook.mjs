@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { PLUGIN_ROOT, config, ensureDir, paths } from '../lib/config.mjs';
-import { append, errorText, isNoise, isRealTraffic, signature, commandHead } from '../lib/events.mjs';
+import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHead } from '../lib/events.mjs';
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
 
@@ -52,7 +52,8 @@ async function pre(input) {
   const tool = input.tool_name;
   const real = isRealTraffic(input);
   if (SHELLS.has(tool) && real) {
-    writeFileSync(callFile(input), JSON.stringify({ ts: Date.now(), command: input.tool_input?.command }));
+    // Only the start time: the command itself stays out of state files (it may hold a secret).
+    writeFileSync(callFile(input), JSON.stringify({ ts: Date.now() }));
     sweep();
   }
   const { rules } = await loadRules();
@@ -81,7 +82,7 @@ async function pre(input) {
 }
 
 function remember(input, ev) {
-  // Watch the next few calls in this session for the one that worked.
+  // Watch the next few calls in this session for the one that worked. ev is the redacted copy.
   writeFileSync(stateFile('sessions', `${safe(input.session_id)}.json`), JSON.stringify({ event: ev.id, ts: Date.now(), tool: ev.tool, command: ev.command, signature: ev.signature, left: config().recoveryWindow }));
 }
 
@@ -93,15 +94,13 @@ function failure(input) {
   const started = SHELLS.has(tool) ? startedAt(input) : null;
   const ranMs = started ? Date.now() - started : undefined;
   const base = { session_id: input.session_id, cwd: input.cwd, tool, input: input.tool_input, command, ranMs };
-  if (input.is_interrupt) {
-    // The person pressed stop. A long-running shell call that gets stopped is usually a stall.
-    append({ ...base, kind: 'interrupt', signature: signature(tool, command, 'interrupted') });
-    return;
-  }
-  const kind = /\b(timed out|timeout)\b/i.test(text) && SHELLS.has(tool) ? 'timeout' : isNoise(tool, command, text) ? 'noise' : 'failure';
-  const ev = append({ ...base, kind, error: text, signature: signature(tool, command, text) });
+  // The person pressed stop: a long-running shell call that gets stopped is usually a stall. It still
+  // goes through recall, so an issue with when.kind "interrupt" hands back its fix.
+  const interrupt = Boolean(input.is_interrupt);
+  const kind = interrupt ? 'interrupt' : /\b(timed out|timeout)\b/i.test(text) && SHELLS.has(tool) ? 'timeout' : isNoise(tool, command, text) ? 'noise' : 'failure';
+  const ev = append(interrupt ? { ...base, kind, signature: signature(tool, command, 'interrupted') } : { ...base, kind, error: text, signature: signature(tool, command, text) });
   if (kind === 'noise') return;
-  remember(input, ev);
+  if (!interrupt) remember(input, ev);
   const hits = findMatches(ev);
   const lines = [];
   for (const i of hits.slice(0, 3)) lines.push(`Known issue ${i.id} (${i.title}): ${i.fix || 'no fix recorded yet; see the issue file.'}`);
@@ -128,13 +127,15 @@ async function post(input) {
     if (ti.run_in_background) {
       const resp = typeof input.tool_response === 'string' ? input.tool_response : JSON.stringify(input.tool_response ?? '');
       const id = resp.match(BG_ID)?.[1];
-      if (id) writeFileSync(stateFile('bg', `${safe(id)}.json`), JSON.stringify({ ts: Date.now(), command: ti.command, session_id: input.session_id, cwd: input.cwd }));
+      if (id) writeFileSync(stateFile('bg', `${safe(id)}.json`), JSON.stringify({ ts: Date.now(), command: redact(ti.command), session_id: input.session_id, cwd: input.cwd }));
     }
     const sf = stateFile('sessions', `${safe(input.session_id)}.json`);
     const m = readJson(sf);
     if (m) {
       const head = (c) => commandHead(tool, c).split(' ')[0];
-      if (head(ti.command) === head(m.command) && ti.command !== m.command) {
+      // m.command was redacted when saved; compare like with like.
+      const now = redact(ti.command);
+      if (head(now) === head(m.command) && now !== m.command) {
         append({ kind: 'recovery', session_id: input.session_id, cwd: input.cwd, tool, command: ti.command, after: m.event, failed: m.command, signature: m.signature });
         rmSync(sf, { force: true });
       } else if (--m.left <= 0) rmSync(sf, { force: true });

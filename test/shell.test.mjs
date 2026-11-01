@@ -82,3 +82,26 @@ test('a heredoc body adds no words to the command that opened it', () => {
   assert.deepEqual(st.argv, ['cat']);
   assert.equal(stages("cat <<'EOF' | grep x\nsed -i a b\nEOF").length, 2);
 });
+
+test('newlines inside quotes and line continuations do not split a command', () => {
+  assert.deepEqual(names('echo "a\nb" | grep x f'), ['echo', 'grep']);
+  assert.deepEqual(stages('ls \\\n  -la')[0].argv, ['ls', '-la']);
+  const ps = stages('Set-Content -Value "a\nb" `\n -Path x.json', 'powershell');
+  assert.equal(ps.length, 1);
+  assert.deepEqual(ps[0].argv, ['Set-Content', '-Value', 'a\nb', '-Path', 'x.json']);
+});
+
+test('redirects attached to words are still redirects', () => {
+  const r = (c, d) => stages(c, d).map((s) => [s.argv, s.redirects.map((x) => x.fd + x.op + x.target)]);
+  assert.deepEqual(r('echo {}>~/.claude/settings.json'), [[['echo', '{}'], ['>~/.claude/settings.json']]]);
+  assert.deepEqual(r('cat<file'), [[['cat'], ['<file']]]);
+  assert.deepEqual(r('cmd foo2>x 2>&1'), [[['cmd', 'foo2'], ['>x', '2>&1']]]);
+  assert.deepEqual(r('echo "a>b" x'), [[['echo', 'a>b', 'x'], []]]);
+  assert.deepEqual(r('Get-X 2>&1 *>out.txt', 'powershell'), [[['Get-X'], ['2>&1', '*>out.txt']]]);
+  assert.deepEqual(r('diff <(sort a) <(sort b)'), [[['diff'], ['<(sort a)', '<(sort b)']]]);
+});
+
+test('comments add no words', () => {
+  assert.deepEqual(stages('grep foo # explain this')[0].argv, ['grep', 'foo']);
+  assert.deepEqual(stages('Get-Item x # note', 'powershell')[0].argv, ['Get-Item', 'x']);
+});

@@ -1,9 +1,13 @@
 // The core pack: always on. It protects antibody itself and catches commands that hang.
-import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { join, posix } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, paths } from '../../lib/config.mjs';
 import { flagValue, hasFlag } from '../../lib/shell.mjs';
 
-const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/^\/([a-z])\//i, '$1:/').toLowerCase();
+const norm = (p) => {
+  const s = String(p || '').replace(/\\/g, '/').replace(/^\/([a-z])\//i, '$1:/').toLowerCase();
+  return s ? posix.normalize(s) : s; // folds a/../b and ./x so a protected path can't hide behind them
+};
 const under = (p, dir) => {
   const a = norm(p);
   const b = norm(dir).replace(/\/$/, '');
@@ -12,11 +16,29 @@ const under = (p, dir) => {
 const home = () => norm(claudeDir());
 const tildeOf = (p) => norm(p).replace(home(), '~/.claude');
 
+// A path as the shell would see it: ~ and $HOME expanded, relative paths taken from the directory the
+// command runs in.
+const HOME = /^(~|\$HOME|\$\{HOME\}|\$env:USERPROFILE|\$env:HOME)(?=[\\/]|$)/i;
+function resolvePath(p, cwd) {
+  let s = String(p || '');
+  if (HOME.test(s)) return s.replace(HOME, () => homedir());
+  if (!s || !cwd || /^([\\/]|[A-Za-z]:|\$)/.test(s)) return s;
+  return cwd.replace(/[\\/]+$/, '') + '/' + s;
+}
+
 // Commands and redirects that write to a path, for Bash and PowerShell. Reads (cat, grep, Get-Content) are fine.
 const WRITERS = /^(cp|mv|rm|tee|truncate|dd|install|ln|chmod|touch|sed|perl|node|python3?|copy-item|move-item|remove-item|set-content|add-content|out-file|new-item|clear-content|rename-item)$/;
-function writesTo(ctx, test) {
+function writesTo(ctx, check) {
+  let cwd = ctx.cwd;
+  const test = (p, loose) => (loose ? check(p, true) : check(resolvePath(p, cwd)));
   if (ctx.filePath) return ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(ctx.tool) && test(ctx.filePath);
   for (const st of ctx.stages) {
+    // Follow `cd dir && ...` so a relative path is read from where it runs.
+    if (/^(cd|pushd|set-location|sl)$/.test(st.name)) {
+      const to = st.argv.slice(1).find((a) => !a.startsWith('-'));
+      if (to) cwd = resolvePath(to, cwd);
+      continue;
+    }
     if (st.redirects.some((r) => r.op.includes('>') && !/^&?\d*$/.test(r.target) && test(r.target))) return true;
     if (!WRITERS.test(st.name)) continue;
     if (st.name === 'sed' && !st.argv.some((a) => /^-[a-zA-Z]*i|^--in-place/.test(a))) continue;
@@ -64,6 +86,18 @@ function operands(st, spec) {
   for (let k = 0; k < words.length; k++) {
     const w = words[k].masked;
     if (w === '--') { out.push(...words.slice(k + 1)); break; }
+    if (/^-[^-]/.test(w) && !w.includes('=')) {
+      // A short cluster (-in, -efoo, -A3): each letter is a flag until one takes a value, which is
+      // the rest of the word or else the next word.
+      for (let c = 1; c < w.length; c++) {
+        const flag = '-' + w[c];
+        if (!vals.has(flag)) continue;
+        if ((spec.patternOpts || []).includes(flag)) patternFromOpt = true;
+        if (c === w.length - 1) k += vals.get(flag);
+        break;
+      }
+      continue;
+    }
     if (/^-/.test(w) && w !== '-') {
       const flag = w.includes('=') ? w.slice(0, w.indexOf('=')) : w;
       if ((spec.patternOpts || []).includes(flag)) patternFromOpt = true;
@@ -109,6 +143,9 @@ export default [
       fire: [
         { tool: 'Edit', file_path: '/home/u/.claude/settings.json' },
         'echo {} > ~/.claude/settings.json',
+        'echo {}>~/.claude/settings.json',
+        { command: 'cp x.json settings.json', cwd: join(homedir(), '.claude') },
+        { tool: 'PowerShell', command: 'Set-Content -Value "a\nb" `\n -Path $HOME/.claude/settings.json' },
         'cp x.json ~/.claude/settings.local.json',
         `node -e "require('fs').writeFileSync(require('os').homedir()+'/.claude/settings.json','{}')"`,
         { tool: 'PowerShell', command: 'Set-Content -Path $HOME/.claude/settings.json -Value "{}"' },
@@ -134,7 +171,7 @@ export default [
     check(ctx) {
       return writesTo(ctx, (p, loose) => (loose ? /events\.jsonl/.test(norm(p)) && norm(p).includes('antibody') : norm(p) === norm(paths().events) || /\/antibody\/events\.jsonl$/.test(norm(p)))) ? { action: config().protect.events, message: this.message } : null;
     },
-    cases: { fire: ['echo x >> ~/.claude/antibody/events.jsonl'], pass: ['tail -n 5 ~/.claude/antibody/events.jsonl'] },
+    cases: { fire: ['echo x >> ~/.claude/antibody/events.jsonl', { command: 'rm events.jsonl', cwd: paths().home }, `cd '${paths().home}' && echo x > ./events.jsonl`], pass: ['tail -n 5 ~/.claude/antibody/events.jsonl'] },
   },
   {
     id: 'core.protect-local-guards',
@@ -142,9 +179,9 @@ export default [
     action: 'ask',
     message: 'Local guards are code that runs before every shell command. A person approves changes to them; unattended runs should propose the change as a data rule or in the review instead.',
     check(ctx) {
-      return writesTo(ctx, (p, loose) => (loose ? norm(p).includes('/antibody/guards/') : /\/antibody\/guards\/[^/]+\.m?js$/.test(norm(p)))) ? { action: config().protect.localGuards, message: this.message } : null;
+      return writesTo(ctx, (p, loose) => (loose ? norm(p).includes(norm(paths().guards)) || norm(p).includes('/antibody/guards/') : under(p, paths().guards) || /\/\.claude\/antibody\/guards(\/|$)/.test(norm(p)))) ? { action: config().protect.localGuards, message: this.message } : null;
     },
-    cases: { fire: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/guards/twg.mjs' }], pass: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/rules/twg.json' }] },
+    cases: { fire: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/guards/twg.mjs' }, { tool: 'Write', file_path: join(paths().guards, 'lib', 'shell.mjs') }, { command: 'rm lib/shell.mjs', cwd: paths().guards }], pass: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/rules/twg.json' }] },
   },
   {
     id: 'core.plugin-disable',
@@ -170,10 +207,10 @@ export default [
       };
     },
     cases: {
-      fire: ['grep -n foo', 'grep -e foo -e bar', 'sort -u', 'cd src && grep TODO', 'tr a-z A-Z', 'jq .name', "sed 's/a/b/'"],
+      fire: ['grep -n foo', 'grep -e foo -e bar', 'grep -efoo', 'grep -ie foo', 'grep -n foo # explain', 'echo "a\nb" | sort -u; grep x', 'sort -u', 'cd src && grep TODO', 'tr a-z A-Z', 'jq .name', "sed 's/a/b/'"],
       pass: [
         'grep -n foo src/a.ts', 'grep -rn foo', 'grep -rn foo .', 'git log | grep foo', 'grep foo < f.txt', 'cat a.txt',
-        "grep -e foo -e bar file", 'jq -n "1+1"', "sed -n '1,5p' file.ts", 'echo $((1 << 2))', 'grep --version',
+        "grep -e foo -e bar file", 'grep -efoo file.txt', 'grep -ffile.txt input.txt', "sed -es/a/b/ file", 'grep -inA3 foo file','jq -n "1+1"', "sed -n '1,5p' file.ts", 'echo $((1 << 2))', 'grep --version',
         'while read l; do grep x; done < list.txt', 'sort -k 2 file.txt', 'head -n 5 a.log', 'wc -l *.ts', 'jq --arg a b .x f.json',
         "grep -c x <<< 'here'", "cat <<'EOF' | grep x\nhi\nEOF",
       ],
