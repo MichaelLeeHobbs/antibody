@@ -31,7 +31,7 @@ It works like an immune system:
    - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
    - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists.
 
-5. **Check the install** with `antibody doctor`. Coming from the failure-ledger setup? Run `antibody migrate --from ~/.claude` (see [below](#coming-from-the-failure-ledger-setup)).
+5. **Check the install** with `antibody doctor`.
 
 `antibody schedule` shows how to run the review daily or weekly on your OS.
 
@@ -112,7 +112,7 @@ There's one file per root cause, `issues/AB-0001.md`: JSON front matter, then a 
 - `snapshot` and `replay --before`: re-run logged commands through old and new rules and list changed verdicts;
 - `report`;
 - `archive`, `rotate`;
-- `migrate`, `export`, `schedule`.
+- `export`, `schedule`.
 
 ## The review
 
@@ -133,22 +133,6 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
 - Changes to settings, the plugin itself, its log and local guards are caught by `core` rules. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
-
-## Coming from the failure-ledger setup
-
-```
-antibody migrate --from ~/.claude
-```
-
-This reads the old files and never changes them:
-
-- `failure-ledger.md` entries become issues (with status kept: fixed or open);
-- `failure-log.jsonl` lines become events;
-- `hooks/guard-*.mjs` guards become local guards. The exception is `guard-bash-quoting.mjs`, which the `git-bash-windows` pack replaces.
-
-The imported issues have no `when` matchers yet, so their fixes aren't handed back at failure time until a review adds them. Run `/antibody:review` right after migrating.
-
-You can keep the old hooks running beside antibody while you compare the two; failures are then logged twice. When you're done comparing, remove the old hook entries from `settings.json`. `doctor` reminds you.
 
 ## Known gaps
 

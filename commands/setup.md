@@ -1,5 +1,5 @@
 ---
-description: Set antibody up after installing the plugin. Creates the data folder, checks the install, offers to import an old failure-ledger setup, and shows the two settings to add.
+description: Set antibody up after installing the plugin. Creates the data folder, checks the install, and shows the two settings to add.
 ---
 
 You are walking the person through antibody's first-time setup. Keep it short: run the steps, then give one summary.
@@ -8,8 +8,7 @@ You are walking the person through antibody's first-time setup. Keep it short: r
 
 1. Run `antibody init` and keep its output. It is safe to run again: it never overwrites `config.json` or `learned.md`.
 2. Run `antibody doctor`. If a line says FAIL, stop and report it.
-3. If `~/.claude/failure-ledger.md`, `~/.claude/failure-log.jsonl` or `~/.claude/hooks/guard-*.mjs` exist, tell the person and ask whether to import them with `antibody migrate --from ~/.claude`. Migrate only reads that folder. Run it only on a yes, then show its summary. Don't remove or edit the old hooks: the person decides when to stop running both.
-4. Show the two settings from the `init` output exactly as printed, each in its own code block:
+3. Show the two settings from the `init` output exactly as printed, each in its own code block:
    - the `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`. Offer to add it yourself, and add it only on a yes.
    - the `permissions` block for `~/.claude/settings.json`. Never edit `settings.json` yourself, even if asked: antibody keeps that a human step. Say to merge the entries into the existing `allow` and `deny` lists, not replace them.
-5. End with one short summary: the data folder, the packs that are on, what migrate imported (if it ran), and the event log path (`events.jsonl` in the data folder). If migrate imported issues, add that their fixes come back at failure time only after `/antibody:review` has added matchers, and suggest running it now.
+4. End with one short summary: the data folder, the packs that are on, and the event log path (`events.jsonl` in the data folder).

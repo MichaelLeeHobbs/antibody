@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -68,57 +68,6 @@ test('replay: a rule change shows up as changed verdicts against a snapshot', ()
   const r = cli(h.env, 'replay', '--before', snap);
   assert.match(r.out, /CHANGED allow -> deny:bb\.no-list/);
   assert.match(r.out, /1 verdicts changed/);
-  h.done();
-});
-
-test('migrate imports a failure-ledger setup without touching it', () => {
-  const h = tempHome();
-  const old = join(h.dir, 'old');
-  mkdirSync(join(old, 'hooks', 'lib'), { recursive: true });
-  const ledger = `# Failure ledger\n\n### twg workitem get takes keys positionally\n- Seen: 2026-10-28, web-app\n- Seen: 2026-10-29, api\n- What failed: \`twg jira workitem get --id MED-1\`\n- Root cause: keys are positional\n- Fix: guard-twg refuses \`--id\`\n- Status: fixed\n\n### AWS SSO token not refreshed\n- Seen: 2026-10-30, api\n- What failed: long SDK run died\n  (continued line)\n- Root cause: token expiry\n- Fix: workaround only: check expiresAt\n- Status: open\n`;
-  writeFileSync(join(old, 'failure-ledger.md'), ledger);
-  writeFileSync(join(old, 'failure-log.jsonl'), [
-    { ts: '2026-10-29T10:00:00.000Z', session_id: 's1', cwd: '/r', tool: 'Bash', input: { command: 'ls; grep -n zz f' }, error: 'Exit code 1\nf' },
-    { ts: '2026-10-29T10:01:00.000Z', session_id: 's1', cwd: '/r', tool: 'guard:twg', input: { command: 'twg jira workitem get --id MED-1' }, error: 'takes keys positionally' },
-  ].map((x) => JSON.stringify(x)).join('\n') + '\n');
-  writeFileSync(join(old, 'hooks', 'guard-example.mjs'), "import { pipelines, runGuard } from './lib/guard.mjs';\n\nfunction check(cmd) {\n  for (const { stages } of pipelines(cmd)) for (const st of stages) if (/^twg\\s.*--id\\b/.test(st.masked) && /workitem\\s+get/.test(st.masked)) return 'keys are positional';\n  return null;\n}\n\nrunGuard('example', check);\n");
-  writeFileSync(join(old, 'hooks', 'guard-bash-quoting.mjs'), '// replaced by a pack\n');
-  const before = readFileSync(join(old, 'failure-ledger.md'), 'utf8');
-  const m = cli(h.env, 'migrate', '--from', old);
-  assert.equal(m.code, 0, m.err);
-  assert.match(m.out, /issues: 2 added/);
-  assert.match(m.out, /events: 2 imported/);
-  assert.match(m.out, /guard-example\.mjs -> guards\/example\.mjs/);
-  assert.match(m.out, /covered by the git-bash-windows pack/);
-  assert.equal(readFileSync(join(old, 'failure-ledger.md'), 'utf8'), before, 'the old ledger is unchanged');
-  const issues = readdirSync(join(h.env.ANTIBODY_HOME, 'issues'));
-  assert.deepEqual(issues.sort(), ['AB-0001.md', 'AB-0002.md']);
-  assert.match(readFileSync(join(h.env.ANTIBODY_HOME, 'issues', 'AB-0002.md'), 'utf8'), /\(continued line\)/);
-  const list = cli(h.env, 'issues').out;
-  assert.match(list, /recurring|fixed|watching/);
-  assert.match(list, /^open .*AWS SSO/m);
-  // The converted guard works through the engine.
-  const out = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'twg jira workitem get --id MED-7' }) });
-  assert.equal(out.permissionDecision, 'deny');
-  assert.match(out.permissionDecisionReason, /legacy\.example/);
-  // Running it twice adds nothing.
-  assert.match(cli(h.env, 'migrate', '--from', old).out, /issues: 0 added/);
-  const ev = readFileSync(join(h.env.ANTIBODY_HOME, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  assert.deepEqual(ev.filter((e) => e.imported).map((e) => e.kind), ['noise', 'block']);
-  h.done();
-});
-
-test('migrate says whether the git-bash-windows pack is already on', () => {
-  const h = tempHome();
-  const old = join(h.dir, 'old');
-  mkdirSync(join(old, 'hooks'), { recursive: true });
-  writeFileSync(join(old, 'hooks', 'guard-bash-quoting.mjs'), '// replaced by a pack\n');
-  cli(h.env, 'init', '--packs', 'git-bash-windows');
-  assert.match(cli(h.env, 'migrate', '--from', old).out, /git-bash-windows pack \(already on\)/);
-  const h2 = tempHome();
-  cli(h2.env, 'init', '--packs', 'windows-orphans');
-  assert.match(cli(h2.env, 'migrate', '--from', old).out, /git-bash-windows pack \(turn it on in config\.json\)/);
-  h2.done();
   h.done();
 });
 
