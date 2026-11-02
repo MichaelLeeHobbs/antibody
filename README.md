@@ -47,6 +47,16 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 `antibody schedule` shows how to run the review daily or weekly on your OS.
 
+### Updating
+
+Releases are tagged on GitHub (`v0.2.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update:
+
+```
+/plugin marketplace update antibody
+```
+
+then update antibody from the `/plugin` screen (or `claude plugin update antibody@antibody` from a terminal), and restart Claude Code so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
+
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
 ## Packs
@@ -112,14 +122,17 @@ There's one file per root cause, `issues/AB-0001.md`: JSON front matter, then a 
 - **open**: no fix recorded yet;
 - **watching**: fixed less than `quietDays` ago;
 - **fixed**: quiet since then;
-- **recurring**: seen again after the fix, so it needs strengthening.
+- **recurring**: seen again after the fix, so it needs strengthening;
+- **closed** or **project**: archived by hand with `issue archive`. `project` means it was a defect in your project, not something Claude did wrong.
+
+antibody only fixes Claude's own failures. When something is really a bug in your code, dependencies or CI, the review says so ("This is not an AI failure…"), keeps any part that was Claude's mistake, and archives the rest with `antibody issue archive <id> --project <why>`. That clears the issue's matcher (archived issues still match events otherwise) and retires the rules that name it.
 
 ## Command line
 
 `antibody help` lists everything. Where the plugin's `bin/` is on PATH, `bin/antibody` serves sh and Git Bash and `bin/antibody.cmd` serves PowerShell and cmd. Claude Code always adds it for the Bash tool; whether it does for PowerShell depends on the version. Anywhere `antibody` isn't found, run `node <plugin>/bin/antibody.mjs`.
 
 - `note`: what a session found;
-- `issues`, `issue show|add|fix|seen`, `search`;
+- `issues`, `issue show|add|fix|seen|archive`, `search`;
 - `rules`, `rule add|promote|demote|retire`, `test`;
 - `snapshot` and `replay --before`: re-run logged commands through old and new rules and list changed verdicts;
 - `report`;
