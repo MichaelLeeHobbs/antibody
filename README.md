@@ -37,7 +37,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
 
-3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Inside Claude Code's shell tools, `antibody` is on PATH. In your own terminal it isn't, so use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
+3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
 
 4. **Add the two settings `init` prints.** antibody never edits `settings.json` itself, so this step is yours:
    - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
@@ -116,7 +116,7 @@ There's one file per root cause, `issues/AB-0001.md`: JSON front matter, then a 
 
 ## Command line
 
-`antibody help` lists everything. Claude Code's shell tools have `antibody` on PATH (`bin/antibody` for sh and Git Bash, `bin/antibody.cmd` for PowerShell and cmd). Outside them, run `node <plugin>/bin/antibody.mjs`.
+`antibody help` lists everything. Where the plugin's `bin/` is on PATH, `bin/antibody` serves sh and Git Bash and `bin/antibody.cmd` serves PowerShell and cmd. Claude Code always adds it for the Bash tool; whether it does for PowerShell depends on the version. Anywhere `antibody` isn't found, run `node <plugin>/bin/antibody.mjs`.
 
 - `note`: what a session found;
 - `issues`, `issue show|add|fix|seen`, `search`;
