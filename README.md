@@ -1,16 +1,28 @@
-# antibody
+# antibody 🦠💉
 
-A Claude Code plugin that catches the annoying failures Claude makes with its own tools and stops them coming back. Typical examples are a wrong CLI flag, a shell-quoting mix-up, a `grep` that sits waiting on stdin until someone notices, or a retry loop on the same mistake.
+> **You:** It's been eleven minutes. What's going on?
+>
+> **Claude:** Oh, my bad! My `grep` didn't have a file, so it was waiting on stdin. I would have sat here until the heat death of the universe. 🙂
+>
+> **You:** 😐
 
-It works like an immune system:
+Makes you want to #@!$ scream, doesn't it?
+
+And it's never just the once. It's the `--id` flag that was never a flag, for the fourth time this week. It's the heredoc that ate a backtick and turned your file into modern art. It's `tail -5 a.log b.log`, said with total confidence. It's the same retry, three times in a row, each one hopeful that this time the laws of physics will be different.
+
+**Friends, there is a cure. It's called antibody.** *(Side effects may include fewer apologies, shorter sessions, and an unfamiliar feeling of calm. Ask your doctor if antibody is right for you. Your doctor is `antibody doctor`.)*
+
+antibody is a Claude Code plugin that gives Claude an immune system for its own tool mistakes. It catches a failure the first time, remembers the cure, and hands it back the next time, often before the bad command even runs. The `grep` that would have waited forever gets refused in milliseconds, along with a polite note about which file it forgot.
+
+## How the immune system works
 
 | | |
 |---|---|
-| **Capture** | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't keep any ledger themselves. |
-| **Recall** | When a call fails and the failure matches a known issue, antibody hands the fix straight back to the model in the same turn. That works in subagents too. |
-| **Prevent** | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person, or **warn**. |
-| **Learn** | A review command turns recent events, the "what worked next" pairs and session notes into issues and new rules. |
-| **Tolerate** | New rules start in **shadow** mode: they log what they would have done and act only once real traffic shows they're right. Rules that misfire get demoted. |
+| **Capture** 🔬 | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't do any bookkeeping themselves. |
+| **Recall** 🧠 | When a call fails and the failure matches a known issue, antibody hands the fix straight back to the model in the same turn. That works in subagents too. |
+| **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person, or **warn**. |
+| **Learn** 📚 | A review command turns recent events, the "what worked next" pairs and session notes into issues and new rules. |
+| **Tolerate** 🧘 | New rules start in **shadow** mode: they log what they would have done, and act only once real traffic shows they're right. Rules that misfire get demoted, because an immune system that attacks the host is called an autoimmune disease. |
 
 ## Install
 
@@ -134,7 +146,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 - Changes to settings, the plugin itself, its log and local guards are caught by `core` rules. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
 
-## Known gaps
+## Known gaps (no vaccine is 100% effective)
 
 - `warn` relies on PreToolUse `additionalContext` reaching the model without a permission decision. The hook docs don't confirm this, so check it in your version.
 - Background-task ids are read from the Bash tool's response text, and the stop tool names checked are `TaskStop`, `KillShell` and `KillBash`. If your version words these differently, a stall is still logged, but without the command that hung.
