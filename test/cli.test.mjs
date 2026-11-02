@@ -56,6 +56,13 @@ test('issue archive: clears the matcher, --project retires its rules', () => {
   assert.match(shown, /"whenWas"/);
   assert.match(cli(h.env, 'issues', '--all').out, /^project .*AB-0001/m);
   assert.match(cli(h.env, 'rules', '--state', 'retired').out, /x\.pnpm/);
+  assert.match(cli(h.env, 'issue', 'fix', 'AB-0001', 'x').err, /archived by hand/);
+  mkdirSync(join(h.env.ANTIBODY_HOME, 'guards'), { recursive: true });
+  writeFileSync(join(h.dir, 'g.md'), '---\n{"title":"second"}\n---\n');
+  cli(h.env, 'issue', 'add', join(h.dir, 'g.md'));
+  writeFileSync(join(h.env.ANTIBODY_HOME, 'guards', 'g.mjs'), "export default { id: 'g.one', issue: 'AB-0002', check: () => null };\n");
+  assert.match(cli(h.env, 'issue', 'archive', 'AB-0002', '--project', 'x').out, /retired its rules: g\.one/);
+  assert.equal(JSON.parse(readFileSync(join(h.env.ANTIBODY_HOME, 'config.json'), 'utf8')).ruleState['g.one'], 'retired');
   h.done();
 });
 
