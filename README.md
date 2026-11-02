@@ -49,13 +49,19 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.2.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update:
+Releases are tagged on GitHub (`v0.2.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
 /plugin marketplace update antibody
 ```
 
-then update antibody from the `/plugin` screen (or `claude plugin update antibody@antibody` from a terminal), and restart Claude Code so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
+Then update the plugin itself:
+
+```
+claude plugin update antibody@antibody
+```
+
+(or `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
