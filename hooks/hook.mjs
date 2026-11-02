@@ -48,6 +48,12 @@ function sweep() {
   } catch {}
 }
 
+// An ask reaches a person only in the modes where Claude Code prompts. In auto mode it is settled
+// for them, and bypassPermissions/dontAsk never prompt, so there an ask becomes a deny. A mode this
+// list doesn't know counts as unattended too; with no mode in the input at all, the ask stands.
+const ATTENDED = new Set(['default', 'acceptEdits', 'plan']);
+const unattended = (mode) => typeof mode === 'string' && mode !== '' && !ATTENDED.has(mode);
+
 async function pre(input) {
   const tool = input.tool_name;
   const real = isRealTraffic(input);
@@ -59,14 +65,21 @@ async function pre(input) {
   const { rules } = await loadRules();
   const ctx = makeContext({ tool, input: input.tool_input || {}, cwd: input.cwd, session: input.session_id });
   const res = evaluate(ctx, rules);
+  const mode = input.permission_mode;
+  const noPerson = res.decision === 'ask' && unattended(mode);
   if (real) {
     for (const h of res.hits) {
-      const kind = h.shadow ? 'shadow' : h.action === 'deny' ? 'block' : h.action;
-      append({ kind, session_id: input.session_id, cwd: input.cwd, tool, rule: h.rule.id, action: h.action, command: h.from ?? ctx.command, file: ctx.filePath || undefined, message: h.message, to: h.command });
+      const kind = h.shadow ? 'shadow' : h.action === 'deny' || (h.action === 'ask' && noPerson) ? 'block' : h.action;
+      append({ kind, session_id: input.session_id, cwd: input.cwd, tool, rule: h.rule.id, action: h.action, mode, command: h.from ?? ctx.command, file: ctx.filePath || undefined, message: h.message, to: h.command });
     }
   }
   const hso = { hookEventName: 'PreToolUse' };
-  if (res.decision) {
+  if (noPerson) {
+    hso.permissionDecision = 'deny';
+    hso.permissionDecisionReason =
+      `antibody ${res.reason} This session runs in "${mode}" permission mode, where Claude Code settles an ask without showing it to a person, so antibody refuses it instead. ` +
+      "Don't retry it another way: stop and give the person the exact change (the full command, or the file and the edit) so they can make it themselves.";
+  } else if (res.decision) {
     hso.permissionDecision = res.decision;
     hso.permissionDecisionReason =
       `antibody ${res.reason}` +
@@ -74,9 +87,9 @@ async function pre(input) {
         ? ` Take the alternative it names; don't reshape the command to get past the check. If the rule is wrong for this case, say so with: ${CLI} note "<why the rule is wrong>"`
         : '');
   }
-  if (res.command && res.decision !== 'deny') hso.updatedInput = { ...(input.tool_input || {}), command: res.command };
+  if (res.command && hso.permissionDecision !== 'deny') hso.updatedInput = { ...(input.tool_input || {}), command: res.command };
   const notes = [...res.notes];
-  if (res.command && res.decision !== 'deny') notes.unshift(`antibody rewrote the command to: ${res.command}`);
+  if (res.command && hso.permissionDecision !== 'deny') notes.unshift(`antibody rewrote the command to: ${res.command}`);
   if (notes.length) hso.additionalContext = notes.join('\n');
   if (Object.keys(hso).length > 1) out({ hookSpecificOutput: hso });
 }

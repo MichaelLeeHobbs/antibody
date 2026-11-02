@@ -20,7 +20,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 |---|---|
 | **Capture** 🔬 | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't do any bookkeeping themselves. |
 | **Recall** 🧠 | When a call fails and the failure matches a known issue, antibody hands the fix straight back to the model in the same turn. That works in subagents too. |
-| **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person, or **warn**. |
+| **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person (refused outright when no one would see the question, as in auto mode), or **warn**. |
 | **Learn** 📚 | A review command turns recent events, the "what worked next" pairs and session notes into issues and new rules. |
 | **Tolerate** 🧘 | New rules start in **shadow** mode: they log what they would have done, and act only once real traffic shows they're right. Rules that misfire get demoted, because an immune system that attacks the host is called an autoimmune disease. |
 
@@ -73,7 +73,7 @@ Data rules live in `rules/*.json` in the data folder. The review adds them, and 
 ```
 
 - **`match`** keys (all must hold on one stage of the command): `name`, `command` (regex on the stage with quoted text masked), `raw`, `notRaw`, `hasFlag`, `anyFlag`, `lacksFlag`, `repeatedFlag`, `flagValue`, `next` (the next stage in the pipe), `redirect`, `stage: "first"`, `noInput`. Whole-command keys: `whole`, `notWhole`. For Write/Edit rules: `filePath`.
-- **Actions:** `deny`, `ask`, `warn`, `rewrite`.
+- **Actions:** `deny`, `ask`, `warn`, `rewrite`. An `ask` reaches a person only in the `default`, `acceptEdits` and `plan` permission modes. In `auto` mode Claude Code settles an ask without showing it, and `bypassPermissions` and `dontAsk` never prompt, so in those (and any mode antibody doesn't know) the hook turns `ask` into `deny` and tells the session to hand the person the exact change.
 - **Rewrite operations:** `renameFlag`, `dropFlag`, `insertAfterName`, `replace` (a regex on the stage, with `$1` groups).
 - **Scope:** `scope.os` and `scope.cwd`, for example `{ "cwd": "/web-app(/|$)" }` makes a rule project-only.
 
@@ -142,6 +142,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 - `warn` relies on PreToolUse `additionalContext` reaching the model without a permission decision. The hook docs don't confirm this, so check it in your version.
 - Background-task ids are read from the Bash tool's response text, and the stop tool names checked are `TaskStop`, `KillShell` and `KillBash`. If your version words these differently, a stall is still logged, but without the command that hung.
+- Whether a person will see an `ask` is read from the hook input's `permission_mode`. A Claude Code version that doesn't send it gets the plain `ask`, which in auto mode is settled without a person.
 - `doctor` doesn't yet verify the plugin's files against release hashes.
 
 ## License
