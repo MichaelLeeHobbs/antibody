@@ -26,14 +26,18 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ## Install
 
-1. **Add the marketplace and install the plugin.** In Claude Code:
+1. **Add the marketplace and install the plugin.** From a terminal (PowerShell, cmd, bash), not inside a Claude session:
 
    ```
-   /plugin marketplace add MichaelLeeHobbs/antibody
-   /plugin install antibody@antibody
+   claude plugin marketplace add MichaelLeeHobbs/antibody
+   claude plugin install antibody@antibody
    ```
 
-   `/plugin install` opens the plugin screen. Confirm the install there; it prints nothing else. From a terminal, `claude plugin install antibody@antibody` does the same without the screen.
+   Adding the marketplace only registers it; the second command is what installs the plugin. Check it with `claude plugin list`, which should show `antibody@antibody` as enabled. Start a new Claude session afterwards so the hooks load. The plugin is installed for your user, so other Claude Code front ends that share `~/.claude`, such as the Desktop app's Code tab, should pick it up too.
+
+   Inside the terminal Claude Code UI you can use `/plugin marketplace add MichaelLeeHobbs/antibody` and `/plugin install antibody@antibody` instead. Both open the plugin screen, and nothing is installed until you confirm the install there. These slash commands may not work in the Claude Desktop app, so use the terminal commands above there.
+
+   If adding the marketplace fails while cloning (for example, git tries SSH and can't find your keys), add it by its HTTPS URL instead: `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. Adding a marketplace needs `git` on your PATH.
 
 2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
 
@@ -52,7 +56,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 Releases are tagged on GitHub (`v0.2.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
-/plugin marketplace update antibody
+claude plugin marketplace update antibody
 ```
 
 Then update the plugin itself:
@@ -61,7 +65,7 @@ Then update the plugin itself:
 claude plugin update antibody@antibody
 ```
 
-(or `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
+(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
