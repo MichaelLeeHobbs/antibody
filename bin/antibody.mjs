@@ -3,7 +3,7 @@
 import { appendFileSync, cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, ensureDir, paths } from '../lib/config.mjs';
-import { append, commandHead, isNoise, readEvents, signature } from '../lib/events.mjs';
+import { append, commandHead, readEvents, signature } from '../lib/events.mjs';
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
 
@@ -51,7 +51,6 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
   report [--days N]                     the healer's numbers for the last N days (default 7)
   archive                               move fixed, quiet issues to issues/archive
   rotate [--keep-days N]                move events older than N days (default 90) to a dated file
-  migrate --from <old ~/.claude>        import a failure-ledger setup (ledger, log, guards)
   export <rule id...>                   print rules as a shareable pack, without local details
   schedule                              how to run the review on a schedule on this OS
 
@@ -115,9 +114,11 @@ async function main() {
       say('');
       say('2. Add these to "permissions" in ~/.claude/settings.json so the review can heal unattended:');
       say(JSON.stringify({
-        allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, `Bash(${CLI} *)`],
+        allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, 'Bash(antibody *)', `Bash(${CLI} *)`],
         deny: ['Edit(~/.claude/settings.json)', 'Edit(~/.claude/settings.local.json)', `Edit(${home}/guards/**)`, `Edit(${home}/events.jsonl)`],
       }, null, 2).replace(/^/gm, '   '));
+      say('   Merge these into your existing "allow" and "deny" lists. "Bash(antibody *)" keeps working after plugin updates;');
+      say('   the full-path entry names this version only.');
       say('   (antibody does not edit settings.json itself: that boundary stays a human act.)');
       say('');
       say(`3. Optional: put the data folder under git, so every review is a commit you can revert: cd "${p.home}" && git init`);
@@ -144,7 +145,6 @@ async function main() {
       const settings = join(claudeDir(), 'settings.json');
       if (existsSync(settings)) {
         const s = readText(settings);
-        if (/log-failure\.mjs|guard-[\w-]+\.mjs/.test(s)) say('note  settings.json still registers old failure-ledger hooks; remove them once you have migrated, or failures get logged twice');
         try {
           const j = JSON.parse(s);
           const en = Object.entries(j.enabledPlugins || {}).find(([k]) => k.startsWith('antibody@'));
@@ -367,12 +367,6 @@ async function main() {
       return;
     }
 
-    case 'migrate': {
-      const from = opt('--from') || fail('Usage: migrate --from <old ~/.claude folder>');
-      say(migrate(from));
-      return;
-    }
-
     case 'export': {
       const { rules } = await loadRules();
       const out = [];
@@ -477,86 +471,6 @@ function report(n, { rules, errors }) {
   p('## Notes from sessions');
   if (!notes.length) p('None.');
   for (const nt of notes.slice(-20)) p(`- ${nt.ts.slice(0, 16)}${nt.after ? ` on ${nt.after}` : ''}: ${nt.text}`);
-  return out.join('\n');
-}
-
-// Import a failure-ledger setup: failure-ledger.md entries become issues, failure-log.jsonl lines
-// become events, and guard-*.mjs files become local guards. Nothing in the old folder changes.
-function migrate(from) {
-  const out = [];
-  const p = paths();
-  for (const d of [p.home, p.issues, p.rules, p.guards, p.reviews]) ensureDir(d);
-  const ledger = join(from, 'failure-ledger.md');
-  if (existsSync(ledger)) {
-    const text = readText(ledger);
-    const entries = text.split(/^(?=### )/m).filter((s) => s.startsWith('### '));
-    const existing = new Set(listIssues({ archived: true }).map((i) => i.title.toLowerCase()));
-    let added = 0;
-    for (const e of entries) {
-      const title = e.split('\n')[0].slice(4).trim();
-      if (existing.has(title.toLowerCase())) continue;
-      const fields = {};
-      let last = null;
-      for (const l of e.split('\n').slice(1)) {
-        const m = l.match(/^- (Seen|What failed|Root cause|Fix|Status):\s*(.*)$/);
-        if (m) { last = m[1]; (fields[last] ||= []).push(m[2]); }
-        else if (last && l.trim()) fields[last][fields[last].length - 1] += '\n' + l;
-      }
-      const statusText = (fields.Status || [''])[0];
-      const seen = fields.Seen || [];
-      const lastDate = seen.map((s) => s.match(/\d{4}-\d\d-\d\d/)?.[0]).filter(Boolean).sort().at(-1);
-      const body = [`## What failed\n${(fields['What failed'] || ['']).join('\n')}`, `## Root cause\n${(fields['Root cause'] || ['']).join('\n')}`, `## Fix\n${(fields.Fix || ['']).join('\n')}`, `## Status when imported\n${statusText}`].join('\n\n');
-      const fixed = /^fixed/i.test(statusText);
-      createIssue({ title, seen, fix: (fields.Fix || [''])[0].slice(0, 400), ...(fixed && lastDate ? { fixedAt: `${lastDate}T23:59:59.000Z` } : {}), imported: 'failure-ledger', body });
-      added++;
-    }
-    out.push(`issues: ${added} added from ${entries.length} ledger entries (titles already present were skipped)`);
-    out.push('  None has a "when" matcher yet, so fixes are not handed back at failure time until the review adds them.');
-  } else out.push(`no ${ledger}`);
-
-  const log = join(from, 'failure-log.jsonl');
-  if (existsSync(log)) {
-    const lines = readText(log).split('\n').filter(Boolean);
-    let n = 0;
-    const target = p.events;
-    const have = existsSync(target) ? new Set(readText(target).split('\n').filter(Boolean).map((l) => { try { const j = JSON.parse(l); return j.ts + j.session_id; } catch { return ''; } })) : new Set();
-    const buf = [];
-    for (const l of lines) {
-      let j;
-      try { j = JSON.parse(l); } catch { continue; }
-      if (have.has(j.ts + j.session_id)) continue;
-      const command = j.input?.command;
-      const guard = String(j.tool).startsWith('guard:');
-      const tool = guard ? 'Bash' : j.tool;
-      const text = typeof j.error === 'string' ? j.error : JSON.stringify(j.error ?? '');
-      const kind = guard ? 'block' : isNoise(tool, command, text) ? 'noise' : 'failure';
-      buf.push(JSON.stringify({ id: 'm' + Buffer.from(j.ts + (j.session_id || '')).toString('base64url').slice(0, 14), ts: j.ts, kind, session_id: j.session_id, cwd: j.cwd, tool, rule: guard ? `legacy.${String(j.tool).slice(6)}` : undefined, command, input: guard ? undefined : j.input, error: guard ? undefined : text, message: guard ? text : undefined, signature: guard ? undefined : signature(tool, command, text), imported: true }));
-      n++;
-    }
-    if (buf.length) writeFileSync(target, buf.join('\n') + '\n', { flag: 'a' });
-    out.push(`events: ${n} imported from failure-log.jsonl`);
-  } else out.push(`no ${log}`);
-
-  const hooks = join(from, 'hooks');
-  if (existsSync(hooks)) {
-    ensureDir(join(p.guards, 'lib'));
-    cpSync(join(PLUGIN_ROOT, 'templates', 'legacy-guard.mjs'), join(p.guards, 'lib', 'legacy-guard.mjs'));
-    cpSync(join(PLUGIN_ROOT, 'lib', 'shell.mjs'), join(p.guards, 'lib', 'shell.mjs'));
-    for (const f of readdirSync(hooks).filter((x) => /^guard-[\w-]+\.mjs$/.test(x) && !x.includes('.bak'))) {
-      const name = f.slice(6, -4);
-      if (name === 'bash-quoting') { out.push('guards: guard-bash-quoting.mjs is covered by the git-bash-windows pack (turn it on in config.json); not copied'); continue; }
-      const dest = join(p.guards, `${name}.mjs`);
-      if (existsSync(dest)) { out.push(`guards: ${name}.mjs already exists; skipped`); continue; }
-      let src = readText(join(hooks, f));
-      src = src.replace(/^import\s*\{([^}]*)\}\s*from\s*['"]\.\/lib\/guard\.mjs['"];?/m, (_, names) => `import {${names.replace(/\brunGuard\b,?\s*/, '')}} from './lib/legacy-guard.mjs';`);
-      src = src.replace(/^runGuard\(\s*['"]([\w-]+)['"]\s*,\s*(\w+)\s*\);?\s*$/m, (_, id, fn) => `export default { id: 'legacy.${id}', tools: ['Bash', 'PowerShell'], action: 'deny', message: '', check: (ctx) => ${fn}(ctx.command || '') };`);
-      if (!/export default/.test(src)) { out.push(`guards: ${f} has no runGuard(...) call to convert; skipped`); continue; }
-      writeFileSync(dest, src);
-      out.push(`guards: ${f} -> guards/${name}.mjs (rule legacy.${name}); add its test cases with a "cases" field`);
-    }
-  }
-  out.push('');
-  out.push(`Next: ${CLI} doctor, then ${CLI} report --days 30. Remove the old hooks from settings.json once antibody's look right.`);
   return out.join('\n');
 }
 

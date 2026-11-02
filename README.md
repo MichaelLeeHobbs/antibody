@@ -26,18 +26,26 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ## Install
 
-```
-/plugin marketplace add MichaelLeeHobbs/antibody
-/plugin install antibody@antibody
-```
+1. **Add the marketplace and install the plugin.** In Claude Code:
 
-Then run `node <plugin>/bin/antibody.mjs init` (the path is shown by `/plugin`). It:
+   ```
+   /plugin marketplace add MichaelLeeHobbs/antibody
+   /plugin install antibody@antibody
+   ```
 
-- creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`);
-- picks packs for your OS;
-- prints the two things to add by hand: an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`, and a `permissions` block for `settings.json`. antibody never edits `settings.json` itself.
+   `/plugin install` opens the plugin screen. Confirm the install there; it prints nothing else. From a terminal, `claude plugin install antibody@antibody` does the same without the screen.
 
-Run `antibody doctor` to check the install, and `antibody schedule` to see how to run the review daily or weekly on your OS.
+2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
+
+3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
+
+4. **Add the two settings `init` prints.** antibody never edits `settings.json` itself, so this step is yours:
+   - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
+   - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists.
+
+5. **Check the install** with `antibody doctor`.
+
+`antibody schedule` shows how to run the review daily or weekly on your OS.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
@@ -108,7 +116,7 @@ There's one file per root cause, `issues/AB-0001.md`: JSON front matter, then a 
 
 ## Command line
 
-`node <plugin>/bin/antibody.mjs help` lists everything:
+`antibody help` lists everything. Where the plugin's `bin/` is on PATH, `bin/antibody` serves sh and Git Bash and `bin/antibody.cmd` serves PowerShell and cmd. Claude Code always adds it for the Bash tool; whether it does for PowerShell depends on the version. Anywhere `antibody` isn't found, run `node <plugin>/bin/antibody.mjs`.
 
 - `note`: what a session found;
 - `issues`, `issue show|add|fix|seen`, `search`;
