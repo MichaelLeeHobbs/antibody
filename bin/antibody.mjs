@@ -115,9 +115,11 @@ async function main() {
       say('');
       say('2. Add these to "permissions" in ~/.claude/settings.json so the review can heal unattended:');
       say(JSON.stringify({
-        allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, `Bash(${CLI} *)`],
+        allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, 'Bash(antibody *)', `Bash(${CLI} *)`],
         deny: ['Edit(~/.claude/settings.json)', 'Edit(~/.claude/settings.local.json)', `Edit(${home}/guards/**)`, `Edit(${home}/events.jsonl)`],
       }, null, 2).replace(/^/gm, '   '));
+      say('   Merge these into your existing "allow" and "deny" lists. "Bash(antibody *)" keeps working after plugin updates;');
+      say('   the full-path entry names this version only.');
       say('   (antibody does not edit settings.json itself: that boundary stays a human act.)');
       say('');
       say(`3. Optional: put the data folder under git, so every review is a commit you can revert: cd "${p.home}" && git init`);
@@ -511,7 +513,7 @@ function migrate(from) {
       added++;
     }
     out.push(`issues: ${added} added from ${entries.length} ledger entries (titles already present were skipped)`);
-    out.push('  None has a "when" matcher yet, so fixes are not handed back at failure time until the review adds them.');
+    if (added) out.push('  None has a "when" matcher yet, so fixes are not handed back at failure time until a review adds them: run /antibody:review next.');
   } else out.push(`no ${ledger}`);
 
   const log = join(from, 'failure-log.jsonl');
@@ -544,7 +546,11 @@ function migrate(from) {
     cpSync(join(PLUGIN_ROOT, 'lib', 'shell.mjs'), join(p.guards, 'lib', 'shell.mjs'));
     for (const f of readdirSync(hooks).filter((x) => /^guard-[\w-]+\.mjs$/.test(x) && !x.includes('.bak'))) {
       const name = f.slice(6, -4);
-      if (name === 'bash-quoting') { out.push('guards: guard-bash-quoting.mjs is covered by the git-bash-windows pack (turn it on in config.json); not copied'); continue; }
+      if (name === 'bash-quoting') {
+        const on = config().packs.includes('git-bash-windows');
+        out.push(`guards: guard-bash-quoting.mjs is covered by the git-bash-windows pack (${on ? 'already on' : 'turn it on in config.json'}); not copied`);
+        continue;
+      }
       const dest = join(p.guards, `${name}.mjs`);
       if (existsSync(dest)) { out.push(`guards: ${name}.mjs already exists; skipped`); continue; }
       let src = readText(join(hooks, f));

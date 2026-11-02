@@ -4,7 +4,7 @@ description: antibody's healing pass. Turn recent failures, stalls and notes int
 
 You are running antibody's review: a short, mostly unattended pass that turns the failures Claude hit recently into fixes that stop them recurring. The person reads your summary later. The best review says "fixed N things, nothing needs you".
 
-`$CLI` below means `node "${CLAUDE_PLUGIN_ROOT}/bin/antibody.mjs"`. The data folder is the one `$CLI` prints at the bottom of its help. Read `config.json` there first: `owner` is who reads this, `repoFixes` says where repo fixes go.
+`$CLI` below means `antibody` (on PATH in your shell tools), or `node "${CLAUDE_PLUGIN_ROOT}/bin/antibody.mjs"` if the shell says `antibody` isn't found. The data folder is the one `$CLI` prints at the bottom of its help. Read `config.json` there first: `owner` is who reads this, `repoFixes` says where repo fixes go.
 
 ## Ground rules
 

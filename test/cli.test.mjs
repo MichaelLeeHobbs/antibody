@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { call, cli, hook, tempHome } from './helpers.mjs';
 
 test('init, doctor and test on a fresh install', () => {
@@ -10,6 +12,7 @@ test('init, doctor and test on a fresh install', () => {
   assert.equal(init.code, 0, init.err);
   assert.match(init.out, /learned\.md/);
   assert.match(init.out, /"deny"/);
+  assert.match(init.out, /"Bash\(antibody \*\)"/, 'a permission entry that survives plugin updates');
   const doc = cli(h.env, 'doctor');
   assert.equal(doc.code, 0, doc.out + doc.err);
   const t = cli(h.env, 'test');
@@ -103,6 +106,30 @@ test('migrate imports a failure-ledger setup without touching it', () => {
   const ev = readFileSync(join(h.env.ANTIBODY_HOME, 'events.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.deepEqual(ev.filter((e) => e.imported).map((e) => e.kind), ['noise', 'block']);
   h.done();
+});
+
+test('migrate says whether the git-bash-windows pack is already on', () => {
+  const h = tempHome();
+  const old = join(h.dir, 'old');
+  mkdirSync(join(old, 'hooks'), { recursive: true });
+  writeFileSync(join(old, 'hooks', 'guard-bash-quoting.mjs'), '// replaced by a pack\n');
+  cli(h.env, 'init', '--packs', 'git-bash-windows');
+  assert.match(cli(h.env, 'migrate', '--from', old).out, /git-bash-windows pack \(already on\)/);
+  const h2 = tempHome();
+  cli(h2.env, 'init', '--packs', 'windows-orphans');
+  assert.match(cli(h2.env, 'migrate', '--from', old).out, /git-bash-windows pack \(turn it on in config\.json\)/);
+  h2.done();
+  h.done();
+});
+
+test('the antibody shims run the CLI', () => {
+  const bin = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin');
+  const sh = readFileSync(join(bin, 'antibody'), 'utf8');
+  assert.ok(sh.startsWith('#!/bin/sh\n'), 'the sh shim keeps LF endings');
+  const out = process.platform === 'win32'
+    ? execFileSync('cmd.exe', ['/d', '/c', join(bin, 'antibody.cmd'), 'help'], { encoding: 'utf8' })
+    : execFileSync('sh', [join(bin, 'antibody'), 'help'], { encoding: 'utf8' });
+  assert.match(out, /^antibody: learn from/);
 });
 
 test('export strips local details and ships in shadow', () => {

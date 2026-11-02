@@ -14,18 +14,26 @@ It works like an immune system:
 
 ## Install
 
-```
-/plugin marketplace add MichaelLeeHobbs/antibody
-/plugin install antibody@antibody
-```
+1. **Add the marketplace and install the plugin.** In Claude Code:
 
-Then run `node <plugin>/bin/antibody.mjs init` (the path is shown by `/plugin`). It:
+   ```
+   /plugin marketplace add MichaelLeeHobbs/antibody
+   /plugin install antibody@antibody
+   ```
 
-- creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`);
-- picks packs for your OS;
-- prints the two things to add by hand: an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`, and a `permissions` block for `settings.json`. antibody never edits `settings.json` itself.
+   `/plugin install` opens the plugin screen. Confirm the install there; it prints nothing else. From a terminal, `claude plugin install antibody@antibody` does the same without the screen.
 
-Run `antibody doctor` to check the install, and `antibody schedule` to see how to run the review daily or weekly on your OS.
+2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
+
+3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Inside Claude Code's shell tools, `antibody` is on PATH. In your own terminal it isn't, so use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
+
+4. **Add the two settings `init` prints.** antibody never edits `settings.json` itself, so this step is yours:
+   - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
+   - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists.
+
+5. **Check the install** with `antibody doctor`. Coming from the failure-ledger setup? Run `antibody migrate --from ~/.claude` (see [below](#coming-from-the-failure-ledger-setup)).
+
+`antibody schedule` shows how to run the review daily or weekly on your OS.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
@@ -96,7 +104,7 @@ There's one file per root cause, `issues/AB-0001.md`: JSON front matter, then a 
 
 ## Command line
 
-`node <plugin>/bin/antibody.mjs help` lists everything:
+`antibody help` lists everything. Claude Code's shell tools have `antibody` on PATH (`bin/antibody` for sh and Git Bash, `bin/antibody.cmd` for PowerShell and cmd). Outside them, run `node <plugin>/bin/antibody.mjs`.
 
 - `note`: what a session found;
 - `issues`, `issue show|add|fix|seen`, `search`;
@@ -138,7 +146,9 @@ This reads the old files and never changes them:
 - `failure-log.jsonl` lines become events;
 - `hooks/guard-*.mjs` guards become local guards. The exception is `guard-bash-quoting.mjs`, which the `git-bash-windows` pack replaces.
 
-After migrating, remove the old hook entries from `settings.json`; `doctor` reminds you. The imported issues have no `when` matchers yet. The first review adds them.
+The imported issues have no `when` matchers yet, so their fixes aren't handed back at failure time until a review adds them. Run `/antibody:review` right after migrating.
+
+You can keep the old hooks running beside antibody while you compare the two; failures are then logged twice. When you're done comparing, remove the old hook entries from `settings.json`. `doctor` reminds you.
 
 ## Known gaps
 

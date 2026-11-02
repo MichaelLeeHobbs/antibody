@@ -19,7 +19,7 @@ antibody watches tool calls. It logs failures, stalls and blocks by itself. Befo
 When you work out what actually fixed a failure, or why something hung, record it in one line with the note command antibody printed (it includes the event id):
 
 ```
-node "<plugin>/bin/antibody.mjs" note <event id> "grep had no file operand and waited on stdin; name the file"
+antibody note <event id> "grep had no file operand and waited on stdin; name the file"
 ```
 
 Write the fix, not the story. If the note text has backticks or quotes, keep them out of the shell: write the text to a file with the Write tool, then pass `"$(cat <file>)"`. The review turns notes into issues and rules. Don't edit antibody's files, its event log or the settings to "fix" a rule. Those changes belong to the review and to the person.
@@ -30,4 +30,4 @@ Write the fix, not the story. If the note text has backticks or quotes, keep the
 - `antibody issues` lists every issue with its computed status (open, watching, fixed, recurring).
 - `antibody rules` lists every rule, its state (enforce, shadow, retired) and its recent hits.
 
-The full command list is `node "<plugin>/bin/antibody.mjs" help`.
+The full command list is `antibody help`. `antibody` is on PATH in your shell tools; if the shell says it isn't found, use the full `node ".../bin/antibody.mjs"` form that antibody's own messages print.
