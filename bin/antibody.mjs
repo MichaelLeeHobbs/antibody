@@ -34,6 +34,9 @@ const days = (n) => new Date(Date.now() - n * 864e5);
 const HELP = `antibody: learn from Claude's own tool failures and stop them recurring.
 
   init [--packs a,b] [--owner <name>]   create the data folder and print the settings to add
+  permissions [--apply] [--file <path>] show the permission entries settings.json is missing;
+                                        --apply adds them (backs the file up first). Run it
+                                        yourself: a Claude session is asked before it can apply
   doctor                                check the install: data folder, packs, rules, old hooks
   note [<event id>] <text...>           record what fixed (or caused) a failure, stall or block
   issues [--all]                        every issue with its computed status
@@ -83,6 +86,20 @@ function saveRuleState(id, state) {
   return 'config.json ruleState';
 }
 
+// The permission entries antibody needs in ~/.claude/settings.json. No entry names the plugin's
+// versioned path: "Bash(antibody *)" keeps working after an update, a full path would not.
+const tildeHome = () => paths().home.replace(/\\/g, '/').replace(claudeDir().replace(/\\/g, '/'), '~/.claude');
+function permissionEntries() {
+  const home = tildeHome();
+  return {
+    allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, 'Bash(antibody *)'],
+    deny: ['Edit(~/.claude/settings.json)', 'Edit(~/.claude/settings.local.json)', `Edit(${home}/guards/**)`, `Edit(${home}/events.jsonl)`],
+  };
+}
+
+// Entries an older init printed that name one plugin version's path; they stop matching after an update.
+const pinned = (e) => /^Bash\(node ".*[\\/]antibody[\\/][^\\/]+[\\/]bin[\\/]antibody\.mjs" \*\)$/.test(e);
+
 const verdict = (res) => (res.decision ? `${res.decision}:${res.reason.match(/^\[([^\]]+)\]/)?.[1]}` : res.command ? `rewrite:${res.hits.find((h) => h.action === 'rewrite')?.rule.id}` : 'allow');
 
 function verdictOf(e, rules) {
@@ -107,8 +124,7 @@ async function main() {
       if (!existsSync(p.learned)) writeFileSync(p.learned, '# Learned rules (maintained by antibody\'s review)\n\nShort rules learned from repeat failures. The review keeps this file under 3 KB.\n');
       const gi = join(p.home, '.gitignore');
       if (!existsSync(gi)) writeFileSync(gi, 'events*.jsonl\nstate/\n');
-      const t = (s) => s.replace(claudeDir().replace(/\\/g, '/'), '~/.claude');
-      const home = t(p.home.replace(/\\/g, '/'));
+      const home = tildeHome();
       say(`Data folder ready: ${p.home}`);
       say(`Packs: core${packs.length ? ', ' + packs.join(', ') : ''} (change in config.json)`);
       say('');
@@ -116,16 +132,57 @@ async function main() {
       say(`   @${home}/learned.md`);
       say('');
       say('2. Add these to "permissions" in ~/.claude/settings.json so the review can heal unattended:');
-      say(JSON.stringify({
-        allow: [`Edit(${home}/issues/**)`, `Edit(${home}/rules/**)`, `Edit(${home}/reviews/**)`, `Edit(${home}/learned.md)`, 'Bash(antibody *)', `Bash(${CLI} *)`],
-        deny: ['Edit(~/.claude/settings.json)', 'Edit(~/.claude/settings.local.json)', `Edit(${home}/guards/**)`, `Edit(${home}/events.jsonl)`],
-      }, null, 2).replace(/^/gm, '   '));
-      say('   Merge these into your existing "allow" and "deny" lists. "Bash(antibody *)" keeps working after plugin updates;');
-      say('   the full-path entry names this version only.');
-      say('   (antibody does not edit settings.json itself: that boundary stays a human act.)');
+      say(JSON.stringify(permissionEntries(), null, 2).replace(/^/gm, '   '));
+      say('   To merge them for you, run this in your own terminal, not in a Claude session. It shows what it would');
+      say('   add; add --apply to back the file up and add only the missing entries:');
+      say(`     ${CLI} permissions`);
+      say('   (A Claude session never edits settings.json on its own: that boundary stays a human act.)');
       say('');
       say(`3. Optional: put the data folder under git, so every review is a commit you can revert: cd "${p.home}" && git init`);
       say(`4. Schedule the review: ${CLI} schedule`);
+      return;
+    }
+
+    case 'permissions': {
+      const apply = flag('--apply');
+      const file = opt('--file') || join(claudeDir(), 'settings.json');
+      let settings = {};
+      if (existsSync(file)) {
+        try { settings = JSON.parse(readText(file)); } catch (e) { fail(`${file} isn't valid JSON (${e.message}). Fix it first; antibody won't rewrite it.`); }
+        if (!settings || typeof settings !== 'object' || Array.isArray(settings)) fail(`${file} doesn't hold a JSON object; antibody won't rewrite it.`);
+      }
+      const perms = settings.permissions || {};
+      const want = permissionEntries();
+      const add = {};
+      for (const k of ['allow', 'deny']) {
+        if (perms[k] !== undefined && !Array.isArray(perms[k])) fail(`"permissions.${k}" in ${file} isn't a list; antibody won't rewrite it.`);
+        add[k] = want[k].filter((e) => !(perms[k] || []).includes(e));
+      }
+      const stale = [...(perms.allow || []), ...(perms.deny || [])].filter(pinned);
+      say(`Settings file: ${file}${existsSync(file) ? '' : ' (not there yet; --apply creates it)'}`);
+      const n = add.allow.length + add.deny.length;
+      if (!n) say('Every antibody permission entry is already there.');
+      for (const k of ['allow', 'deny']) for (const e of add[k]) say(`  + ${k.padEnd(5)} ${e}`);
+      if (stale.length) {
+        say('These entries name one plugin version\'s path and stop matching after an update. "Bash(antibody *)" covers them; remove them by hand if you like:');
+        stale.forEach((e) => say(`  - ${e}`));
+      }
+      if (!n) return;
+      if (!apply) {
+        say(`Nothing changed. To add ${n === 1 ? 'this entry' : `these ${n} entries`}, run this in your own terminal: ${CLI} permissions --apply`);
+        return;
+      }
+      if (existsSync(file)) {
+        const backup = `${file}.antibody-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+        cpSync(file, backup);
+        say(`Backed up to ${backup}`);
+      } else ensureDir(join(file, '..'));
+      settings.permissions = { ...perms };
+      for (const k of ['allow', 'deny']) if (add[k].length) settings.permissions[k] = [...(perms[k] || []), ...add[k]];
+      const tmp = `${file}.antibody-tmp`;
+      writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n');
+      renameSync(tmp, file);
+      say(`Added ${n} ${n === 1 ? 'entry' : 'entries'} to ${file}. Start a new Claude session so they take effect.`);
       return;
     }
 

@@ -43,9 +43,9 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
 
-4. **Add the two settings `init` prints.** antibody never edits `settings.json` itself, so this step is yours:
+4. **Add the two settings `init` prints.** A Claude session never edits `settings.json` on its own, so this step is yours:
    - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
-   - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists.
+   - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists, or let antibody do it: in your own terminal, run the `permissions` command `init` prints (`node "<plugin folder>/bin/antibody.mjs" permissions`). It lists the missing entries; add `--apply` to back the file up and add them. It only adds entries, never removes or changes yours. If a Claude session runs `permissions --apply`, antibody asks you first, and in auto mode it refuses.
 
 5. **Check the install** with `antibody doctor`.
 
@@ -53,7 +53,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.2.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
+Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
 claude plugin marketplace update antibody
@@ -65,7 +65,7 @@ Then update the plugin itself:
 claude plugin update antibody@antibody
 ```
 
-(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged; anything a release needs you to do by hand is listed in the changelog.
+(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
@@ -73,7 +73,7 @@ Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
 | Pack | What it does |
 |---|---|
-| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you), the plugin's files, the event log or local guards, or disable the plugin without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
+| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, or disable the plugin without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
 | `git-bash-windows` | For Windows with Git Bash: refuses heredocs and inline `node -e` holding backticks, backslashes or `${`, and `sed -i` (misses on CRLF checkouts). Rewrites `tail -5 a b` to `tail -n 5 a b`. |
 | `windows-orphans` | After a background task is stopped on Windows, it names node processes still holding a port. |
 
