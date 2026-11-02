@@ -36,6 +36,29 @@ test('issues: add, fix, computed status, search', () => {
   h.done();
 });
 
+test('issue archive: clears the matcher, --project retires its rules', () => {
+  const h = tempHome();
+  cli(h.env, 'init');
+  const f = join(h.dir, 'issue.md');
+  writeFileSync(f, '---\n{"title":"pnpm add rewrites workspace links","when":{"tool":"Bash","command":"^pnpm add"},"fix":"read the lockfile diff"}\n---\n');
+  cli(h.env, 'issue', 'add', f);
+  const r = join(h.dir, 'r.json');
+  writeFileSync(r, JSON.stringify({ id: 'x.pnpm', issue: 'AB-0001', match: { name: 'pnpm', command: '\\badd\\b' }, message: 'm', cases: { fire: ['pnpm add zod'], pass: ['pnpm install'] } }));
+  assert.equal(cli(h.env, 'rule', 'add', r).code, 0);
+  assert.match(cli(h.env, 'issue', 'archive', 'AB-0001').err, /Give the reason/);
+  const out = cli(h.env, 'issue', 'archive', 'AB-0001', '--project', 'a the-portal version range, not a Claude failure');
+  assert.equal(out.code, 0, out.err);
+  assert.match(out.out, /archived as a project defect/);
+  assert.match(out.out, /retired its rules: x\.pnpm/);
+  assert.ok(!existsSync(join(h.env.ANTIBODY_HOME, 'issues', 'AB-0001.md')));
+  const shown = cli(h.env, 'issue', 'show', 'AB-0001').out;
+  assert.match(shown, /"cause": "project"/);
+  assert.match(shown, /"whenWas"/);
+  assert.match(cli(h.env, 'issues', '--all').out, /^project .*AB-0001/m);
+  assert.match(cli(h.env, 'rules', '--state', 'retired').out, /x\.pnpm/);
+  h.done();
+});
+
 test('rules: add starts in shadow, promote runs the cases, report shows hits', () => {
   const h = tempHome();
   cli(h.env, 'init');

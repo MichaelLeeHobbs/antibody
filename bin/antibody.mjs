@@ -41,6 +41,9 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
   issue add <file.md>                   add an issue (JSON front matter + Markdown body)
   issue fix <id> <text...>              record the fix (starts the "watching" clock)
   issue seen <id> <text...>             add a sighting by hand
+  issue archive <id> [--project] <why...>  close an issue by hand: clears its matcher so its fix
+                                        is no longer handed back; --project marks it a defect in
+                                        the person's project (not Claude's) and retires its rules
   search <words...>                     issues containing every word
   rules [--state shadow|enforce|retired] every rule with its hits in the last 30 days
   rule add <file.json>                  add local data rule(s); new rules start in shadow
@@ -208,7 +211,26 @@ async function main() {
         say(`${i.id} ${sub === 'fix' ? 'fix recorded; now watching for recurrence' : 'sighting added'}`);
         return;
       }
-      fail('Usage: issue show|add|fix|seen ...');
+      if (sub === 'archive') {
+        const project = flag('--project');
+        const i = readIssue(args.shift()) || fail('No such issue');
+        const why = args.join(' ').trim() || fail('Give the reason.');
+        // Archived issues still match events, so the matcher has to go or the fix keeps coming back.
+        if (Object.keys(i.when || {}).length) i.whenWas = i.when;
+        i.when = {};
+        Object.assign(i, { archivedAt: new Date().toISOString(), archivedWhy: why }, project ? { cause: 'project' } : {});
+        const wasActive = !i.archived;
+        i.archived = true;
+        writeIssue(i);
+        if (wasActive) rmSync(join(paths().issues, `${i.id}.md`), { force: true });
+        const named = [];
+        for (const f of listRuleFiles()) for (const r of [].concat(JSON.parse(readText(f)))) if (r.issue === i.id && r.state !== 'retired') named.push(r.id);
+        if (project) for (const id of named) saveRuleState(id, 'retired');
+        say(`${i.id} archived${project ? ' as a project defect' : ''}; its matcher is cleared`);
+        if (named.length) say(project ? `retired its rules: ${named.join(', ')}` : `rules still naming it: ${named.join(', ')} (retire them if they no longer apply)`);
+        return;
+      }
+      fail('Usage: issue show|add|fix|seen|archive ...');
       return;
     }
 

@@ -12,6 +12,10 @@ You are running antibody's review: a short, mostly unattended pass that turns th
 - **Tier 1, do it yourself:** issue files (`issues/*.md`), data rules (`rules/*.json`, via `$CLI rule add`), rule states (`$CLI rule promote|demote|retire`), `learned.md`, and this run's review file.
 - **Tier 2, propose only:** anything executable. That means new helper scripts, local guards (`guards/*.mjs`), changes to a project repository, and rule logic that needs code. Write each one up under "Proposed" with the complete change. A person approves those.
 - Never edit `settings.json`, the plugin's own files, or `events.jsonl`. If a change you are allowed to make is refused, don't look for a way around the refusal. Record it under "Not applied" and move on.
+- **Only Claude's failures are antibody's to fix.** Before you write a matcher, rule, fix line or repo-fix brief for anything, ask: did Claude do something wrong here, or is this a defect in the person's project (their code, dependencies, CI or infrastructure)? Many issues hold both. Split them:
+  - Claude's part (for example "committed a lockfile diff without reading it") stays: an issue, a rule or a `learned.md` line.
+  - The project's part gets one entry under "Not Claude's", in exactly this form: `This is not an AI failure. It is a <project> issue (<one line>) and should be worked in that project.` Name the project from the event's `cwd`, not from memory. Offer a card or a session in that project, and stop there: no root-cause investigation, no brief, no card filed, no global instruction changes.
+  - An issue that is wholly a project defect gets `$CLI issue archive <id> --project <one line>`, which clears its matcher and retires its rules. Don't carry it as an open issue.
 - If the data folder is a git repository, commit once at the end of the run with the message `antibody review <date>`, so the whole run can be reverted.
 
 ## Steps
@@ -19,7 +23,7 @@ You are running antibody's review: a short, mostly unattended pass that turns th
 1. `$CLI doctor`. If it fails, stop and report only that.
 2. `$CLI report --days 7 > <scratch file>` and read it all. Read the newest file in `reviews/`.
 3. `$CLI snapshot` and note the path (needed for step 6).
-4. **Cover what isn't covered.** For each group under "Not covered by any issue" that is a real failure of Claude's (not the person's code failing, not an expected non-zero exit, not a one-off network blip):
+4. **Cover what isn't covered.** For each group under "Not covered by any issue" that is a real failure of Claude's (not an expected non-zero exit, not a one-off network blip, and not a project defect: see "Only Claude's failures" above):
    - if an issue already describes it, add a `when` matcher to that issue so the next sighting gets the fix handed back;
    - otherwise write a new issue file and add it with `$CLI issue add <file>`. Include a `when` matcher (tool, kind, a `command` regex and/or an `error` regex, tight enough not to match unrelated calls) and a one-line `fix` that a session can act on immediately.
    - Use the notes and "worked next" lines: they are what the session that hit it found. Prefer them over your own guess.
@@ -30,10 +34,10 @@ You are running antibody's review: a short, mostly unattended pass that turns th
    - names its issue (`"issue": "AB-0007"`).
    After adding rules, run `$CLI test` and `$CLI replay --before <snapshot>`. If any case fails, or a verdict changed that you didn't intend, remove the rule and say why under "Not applied".
 7. **Promote and demote.** Promote a shadow rule the report marks "ready to promote" after reading its hits and confirming that each one was a real mistake (`$CLI rule promote <id>`). Demote an enforced rule that has a disputed hit you agree with, or whose blocks led sessions to work around it. Retire rules whose issue has been archived and that haven't fired in 60 days.
-8. **Recurring issues.** For each issue the report marks RECURRING, the fix didn't hold. Strengthen it one level: a note becomes a `learned.md` line, a `learned.md` line becomes a warn rule, a warn becomes a deny or rewrite. Record the fix with `$CLI issue fix <id> <text>`.
+8. **Recurring issues.** For each issue the report marks RECURRING, first apply the scope test: a project defect recurs because the project hasn't fixed it, and stronger rules won't help, so report it under "Not Claude's" and archive it with `--project`. Otherwise the fix didn't hold. Strengthen it one level: a note becomes a `learned.md` line, a `learned.md` line becomes a warn rule, a warn becomes a deny or rewrite. Record the fix with `$CLI issue fix <id> <text>`.
 9. **learned.md.** Keep it under 3 KB. A line goes here only when no rule can catch the shape (a habit, a convention, a fact about this host). Merge duplicates, and delete lines a rule now enforces.
-10. **Tidy.** `$CLI archive` moves fixed, quiet issues out of the way. If `events.jsonl` is over 5 MB, run `$CLI rotate`.
-11. **Repo fixes.** For issues whose fix belongs in a project repository, write a complete brief (the failure, the sightings, the fix, what done looks like) under "Repo fixes", at most `repoFixes.max` of them, never one already listed in the last review. If `repoFixes.mode` is `session` and a tool to start a session is available, start one per repo instead.
+10. **Tidy.** Any open issue with an `imported` field and no `cause` predates this scope test: apply it once, archive project defects with `--project`, and add `"cause": "claude"` to the ones you keep so they aren't checked again. `$CLI archive` moves fixed, quiet issues out of the way. If `events.jsonl` is over 5 MB, run `$CLI rotate`.
+11. **Repo fixes.** This step is only for Claude failures whose fix happens to live in a repository (a missing helper script, a doc that misled Claude, a confusing script name). It is never for the project's own bugs; those go under "Not Claude's". For each such issue write a complete brief (the failure, the sightings, the fix, what done looks like) under "Repo fixes", at most `repoFixes.max` of them, never one already listed in the last review. If `repoFixes.mode` is `session` and a tool to start a session is available, start one per repo instead.
 12. Write `reviews/<YYYY-MM-DD>.md` with these sections:
     - **Headline:** better or worse than last week, in one sentence.
     - **Numbers:** events by kind, sessions, issues by status, rule hits, compared with last week.
@@ -41,6 +45,7 @@ You are running antibody's review: a short, mostly unattended pass that turns th
     - **Rules:** added, promoted, demoted or retired.
     - **Proposed:** tier-2 changes for a person, each complete.
     - **Repo fixes.**
+    - **Not Claude's:** project defects found this run, each in the required wording, with the issue archived.
     - **Not applied:** with the reason for each.
     - **Questions:** see below.
 
