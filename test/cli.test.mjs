@@ -21,6 +21,40 @@ test('init, doctor and test on a fresh install', () => {
   h.done();
 });
 
+test('permissions: lists missing entries, --apply backs up and adds only those', () => {
+  const h = tempHome();
+  cli(h.env, 'init');
+  assert.doesNotMatch(cli(h.env, 'init').out, /Bash\(node /, 'no version-pinned entry');
+  const dir = h.env.CLAUDE_CONFIG_DIR;
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'settings.json');
+  const pinned = 'Bash(node "C:/u/.claude/plugins/cache/antibody/antibody/0.2.0/bin/antibody.mjs" *)';
+  writeFileSync(file, JSON.stringify({ model: 'm', permissions: { allow: ['Bash(ls *)', 'Bash(antibody *)', pinned], deny: ['Edit(~/.claude/settings.json)'] } }));
+  const dry = cli(h.env, 'permissions');
+  assert.equal(dry.code, 0, dry.err);
+  assert.match(dry.out, /\+ allow Edit\(.*issues/);
+  assert.doesNotMatch(dry.out, /\+ allow Bash\(antibody/);
+  assert.match(dry.out, /- Bash\(node /, 'points out the stale entry');
+  assert.match(dry.out, /Nothing changed/);
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).permissions.allow.length, 3);
+  const app = cli(h.env, 'permissions', '--apply');
+  assert.equal(app.code, 0, app.err);
+  assert.match(app.out, /Backed up to/);
+  const j = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(j.model, 'm');
+  assert.deepEqual(j.permissions.allow.slice(0, 3), ['Bash(ls *)', 'Bash(antibody *)', pinned], 'keeps existing entries in place');
+  assert.equal(j.permissions.allow.length, 7);
+  assert.equal(j.permissions.deny.length, 4);
+  assert.equal(j.permissions.deny.filter((e) => e === 'Edit(~/.claude/settings.json)').length, 1);
+  assert.match(cli(h.env, 'permissions', '--apply').out, /already there/);
+  writeFileSync(file, '{ not json');
+  const bad = cli(h.env, 'permissions', '--apply');
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /isn't valid JSON/);
+  assert.equal(readFileSync(file, 'utf8'), '{ not json');
+  h.done();
+});
+
 test('issues: add, fix, computed status, search', () => {
   const h = tempHome();
   cli(h.env, 'init');
