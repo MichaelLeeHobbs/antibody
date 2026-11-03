@@ -39,7 +39,20 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
    If adding the marketplace fails while cloning (for example, git tries SSH and can't find your keys), add it by its HTTPS URL instead: `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. Adding a marketplace needs `git` on your PATH.
 
-2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
+   **Turn on auto-update.** Claude Code auto-updates only Anthropic's own marketplaces by default. For every other marketplace, antibody included, it's off, and a marketplace can't turn it on for you. Until you do, you stay on the version you installed and the Update button stays greyed out. Add `"autoUpdate": true` to the marketplace's entry under `extraKnownMarketplaces` in `~/.claude/settings.json` (create the entry if it isn't there):
+
+   ```json
+   "extraKnownMarketplaces": {
+     "antibody": {
+       "source": { "source": "github", "repo": "MichaelLeeHobbs/antibody" },
+       "autoUpdate": true
+     }
+   }
+   ```
+
+   Or, in the terminal UI, use `/plugin` → Marketplaces → antibody → Enable auto-update. Claude Code then refreshes the marketplace and updates the plugin in the background once a session is under way. That session keeps the old version until you run `/reload-plugins` or start a new session. If you set `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1`, plugin auto-update is off too unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
+
+2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you, and reminds you about auto-update if it's still off. To do them by hand instead, read on.
 
 3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
 
@@ -53,7 +66,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
+Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. With auto-update on (install step 1), Claude Code fetches new releases for you in the background, so you can skip the two commands below. You still need `/reload-plugins` or a new session to load the new hooks, and you should still check the changelog for anything to do by hand. Without auto-update, Claude Code never notices a new release on its own, not even to light up the Update button. To update by hand, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
 claude plugin marketplace update antibody
@@ -65,7 +78,7 @@ Then update the plugin itself:
 claude plugin update antibody@antibody
 ```
 
-(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. To get updates without asking, turn on auto-update under `/plugin` → Marketplaces → antibody. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog.
+(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
