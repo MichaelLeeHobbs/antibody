@@ -15,7 +15,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|PowerShell|TaskStop|KillShell|KillBash",
+        "matcher": "Bash|PowerShell|TaskStop|KillShell|KillBash|TodoWrite|TaskCreate|TaskUpdate|mcp__.*__update_plan",
         "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/hook.mjs\" PostToolUse", "timeout": 20 }]
       }
     ],

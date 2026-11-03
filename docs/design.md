@@ -25,6 +25,10 @@ A hang isn't a failure: the call never errors. Either the person presses stop or
 - every shell call is timed (PreToolUse writes a marker, PostToolUse reads it), so slow calls show up even when they finish;
 - `core.stdin-hang` refuses the most common cause before it runs: a stdin reader (`grep`, `sort`, `jq`, `tr`, ...) with no file operand and nothing piped in.
 
+## A stale task list
+
+A long run can do the work and still look stuck: the person checks the task list (TodoWrite, the Task tools, or the desktop app's `update_plan`), and the list can sit on step one for hours while commits and PRs land. antibody records when a session last touched its list. When a commit, push, PR create/merge or Jira transition lands and the list is older than `stalePlanMs` (15 minutes), the model is reminded to update it, at most once per `stalePlanMs`, and a `stale-plan` event is logged. A session that never keeps a list hears nothing. How long a turn runs is not checked: a long turn is often what the person asked for.
+
 ## Parsing shell without a shell
 
 `lib/shell.mjs` masks everything that isn't structure (quoted text, escapes, `$(...)`, backticks, comments, heredoc bodies) into same-length text, then splits on separators and pipes. Rules match structure on the masked text and read values back from the original at the same offsets. Bash and PowerShell quoting are modelled separately.

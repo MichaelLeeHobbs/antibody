@@ -6,6 +6,7 @@ Claude Code notices an update only when the version changes, so every release bu
 
 - **The update notice and review reminder now show in the desktop app.** The desktop app doesn't display a hook's `systemMessage`, so in 0.4.0 they reached only the CLI. The text now also goes to Claude, which mentions it in one line at the end of its first reply. Claude still doesn't run the update or the review unless you ask.
 - **Each notice shows in up to 3 new sessions a day instead of 1.** A session started by another session or a script could use up the single daily showing where nobody saw it. A new release starts the count again.
+- **A stale task list gets a reminder.** A long run could finish three PRs while its task list still showed step one, so the person checking in saw no progress. antibody now notes when a session last updated its list (TodoWrite, the Task tools, or the desktop app's `update_plan`). A commit, push, PR create/merge or Jira transition that lands after 15 minutes without an update reminds the model to update it, once per 15 minutes, and logs a `stale-plan` event. Sessions with no list hear nothing. `"stalePlanMs"` in `config.json` sets the window; 0 turns it off.
 
 By hand: nothing.
 

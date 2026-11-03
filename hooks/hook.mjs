@@ -10,6 +10,7 @@ import { PLUGIN_ROOT, config, ensureDir, lastReview, paths } from '../lib/config
 import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHead } from '../lib/events.mjs';
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
+import { dialectFor, stages } from '../lib/shell.mjs';
 import { checkEnabled, due, mayTell, notice } from '../lib/update.mjs';
 
 const SHELLS = new Set(['Bash', 'PowerShell']);
@@ -130,12 +131,61 @@ function failure(input) {
 
 const BG_ID = /(?:background with ID|shell[_ ]?id|task[_ ]?id|bash[_ ]?id|\bID)["':\s]+([\w-]{4,})/i;
 
+// The task list a person watches: Claude Code's TodoWrite and Task tools, and the desktop app's
+// update_plan. A milestone is a call that finishes a piece of work the list should already show.
+const PLANS = /^(TodoWrite|TaskCreate|TaskUpdate|mcp__.+__update_plan)$/;
+// Matched on parsed words, so quoted text, comments and heredoc bodies never count.
+const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace']);
+function milestone(tool, command) {
+  for (const st of stages(command, dialectFor(tool))) {
+    const a = st.argv;
+    if (st.name === 'git') {
+      let k = 1;
+      while (k < a.length && a[k].startsWith('-')) k += GIT_VALUE_OPTS.has(a[k]) ? 2 : 1;
+      if (a[k] === 'commit') return 'a commit';
+      if (a[k] === 'push') return 'a push';
+    }
+    const pair = (x, ys) => a.some((w, i) => w === x && ys.includes(a[i + 1]));
+    if ((st.name === 'gh' && pair('pr', ['create', 'merge'])) || pair('pull-requests', ['create', 'merge'])) return 'a pull request';
+    if (pair('workitem', ['transition'])) return 'a card moving';
+  }
+  return null;
+}
+const planFile = (input) => stateFile('plans', `${safe(input.session_id)}.json`);
+
+// A long run can leave its task list on step one while commits and PRs pile up (2026-11-03: two
+// hours, three PRs, the list still on "Read epic design"). Only a session that keeps a list hears
+// about it, once per stalePlanMs, and only when a milestone shows real progress since.
+function stalePlan(input, tool, command) {
+  const limit = config().stalePlanMs;
+  if (!limit || !command) return null;
+  const what = milestone(tool, command);
+  if (!what) return null;
+  const f = planFile(input);
+  const p = readJson(f);
+  const now = Date.now();
+  if (!p || now - p.ts < limit || (p.toldAt && now - p.toldAt < limit)) return null;
+  const mins = Math.round((now - p.ts) / 60000);
+  writeFileSync(f, JSON.stringify({ ...p, toldAt: now }));
+  append({ kind: 'stale-plan', session_id: input.session_id, cwd: input.cwd, tool, command, staleMs: now - p.ts, signature: signature(tool, command, 'stale-plan') });
+  return (
+    `antibody: your task list hasn't changed in ${mins} min, and this call was ${what}. The person follows progress on that list, not in chat. ` +
+    'If it no longer shows the step you are on, update it now (mark what is done, start the current step). If it is still right, carry on.'
+  );
+}
+
 async function post(input) {
   const tool = input.tool_name;
   if (!isRealTraffic(input)) return;
   const ti = input.tool_input || {};
   const context = [];
+  if (PLANS.test(tool)) {
+    writeFileSync(planFile(input), JSON.stringify({ ts: Date.now() }));
+    return;
+  }
   if (SHELLS.has(tool)) {
+    const stale = stalePlan(input, tool, ti.command);
+    if (stale) context.push(stale);
     const started = startedAt(input);
     const ranMs = started ? Date.now() - started : null;
     if (ranMs && ranMs > config().slowMs && !ti.run_in_background) append({ kind: 'slow', session_id: input.session_id, cwd: input.cwd, tool, command: ti.command, ranMs, signature: signature(tool, ti.command, 'slow') });
