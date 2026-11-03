@@ -10,7 +10,7 @@ import { PLUGIN_ROOT, config, ensureDir, lastReview, paths } from '../lib/config
 import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHead } from '../lib/events.mjs';
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
-import { checkEnabled, due, notice } from '../lib/update.mjs';
+import { checkEnabled, due, mayTell, notice } from '../lib/update.mjs';
 
 const SHELLS = new Set(['Bash', 'PowerShell']);
 const STOPPERS = new Set(['TaskStop', 'KillShell', 'KillBash']);
@@ -182,7 +182,7 @@ async function post(input) {
 }
 
 // The review is meant to run daily. Two days without one (counted from the first session if there has
-// never been one) gets a reminder, at most once a day.
+// never been one) gets a reminder, in the first few new sessions of each day.
 const DAY = 864e5;
 function reviewNotice(now = Date.now()) {
   if (config().reviewReminder === false || !existsSync(paths().events)) return null;
@@ -192,9 +192,8 @@ function reviewNotice(now = Date.now()) {
   const last = lastReview();
   const since = last ? Date.parse(last) : Date.parse(s.firstSeen);
   let msg = null;
-  if (now - since >= 2 * DAY && !(s.toldAt && now - Date.parse(s.toldAt) < DAY)) {
+  if (now - since >= 2 * DAY && mayTell(s, now)) {
     msg = `antibody's review last ran ${last || 'never'}, so recent failures haven't been turned into fixes yet. Run /antibody:review, or schedule it daily (antibody schedule prints how).`;
-    s.toldAt = new Date(now).toISOString();
   }
   writeFileSync(f, JSON.stringify(s));
   return msg;
@@ -211,7 +210,11 @@ function sessionStart() {
   }
   msgs.push(reviewNotice());
   const text = msgs.filter(Boolean).join('\n');
-  if (text) out({ systemMessage: text });
+  // The CLI shows systemMessage, but the desktop app doesn't, so Claude gets the text too and passes it on.
+  if (text) out({
+    systemMessage: text,
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `antibody notice for the person (their app may not show it on screen): ${text}\nMention it to them in one line at the end of your first reply. Don't run the update or the review yourself unless they ask.` },
+  });
 }
 
 try {

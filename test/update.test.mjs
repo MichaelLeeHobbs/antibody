@@ -62,12 +62,19 @@ test('a failed check is reported and not retried until tomorrow', () => {
   h.done();
 });
 
-test('session start names a newer release once a day, and stays quiet when off or current', () => {
+test('session start names a newer release in three sessions a day, and stays quiet when off or current', () => {
   const h = tempHome();
   writeState(h, { checkedAt: new Date().toISOString(), latest: '99.0.0' });
   const first = start(h.env);
   assert.match(first.systemMessage, new RegExp(`antibody 99\\.0\\.0 is out \\(you have ${VERSION.replace(/\./g, '\\.')}\\)`));
-  assert.equal(start(h.env), null, 'told once today');
+  assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(first.hookSpecificOutput.additionalContext, /antibody 99\.0\.0 is out[\s\S]*end of your first reply/, 'Claude gets it too, for the desktop app');
+  assert.ok(start(h.env) && start(h.env), 'second and third sessions');
+  assert.equal(start(h.env), null, 'told three times today');
+  writeState(h, { checkedAt: new Date().toISOString(), latest: '99.0.1', toldVersion: '99.0.0', toldAt: new Date().toISOString(), toldCount: 3 });
+  assert.match(start(h.env).systemMessage, /99\.0\.1 is out/, 'a newer version starts the count again');
+  writeState(h, { checkedAt: new Date().toISOString(), latest: '99.0.0', toldVersion: '99.0.0', toldAt: new Date(Date.now() - 2 * 864e5).toISOString(), toldCount: 3 });
+  assert.ok(start(h.env), 'a new day starts the count again');
   writeState(h, { checkedAt: new Date().toISOString(), latest: VERSION });
   assert.equal(start(h.env), null, 'nothing newer');
   writeState(h, { checkedAt: new Date().toISOString(), latest: '99.0.0' });
@@ -77,7 +84,7 @@ test('session start names a newer release once a day, and stays quiet when off o
   h.done();
 });
 
-test('session start reminds about an overdue review, once a day', () => {
+test('session start reminds about an overdue review, in three sessions a day', () => {
   const h = tempHome();
   const home = h.env.ANTIBODY_HOME;
   const env = { ...h.env, ANTIBODY_NO_UPDATE_CHECK: '1' };
@@ -87,7 +94,9 @@ test('session start reminds about an overdue review, once a day', () => {
   const ago = (d) => new Date(Date.now() - d * 864e5).toISOString();
   writeFileSync(join(home, 'state', 'review.json'), JSON.stringify({ firstSeen: ago(3) }));
   assert.match(start(env).systemMessage, /review last ran never/);
-  assert.equal(start(env), null, 'told once today');
+  assert.match(start(env).hookSpecificOutput.additionalContext, /review last ran never/);
+  assert.ok(start(env));
+  assert.equal(start(env), null, 'told three times today');
   mkdirSync(join(home, 'reviews'), { recursive: true });
   writeFileSync(join(home, 'reviews', `${ago(5).slice(0, 10)}.md`), 'x');
   writeFileSync(join(home, 'state', 'review.json'), JSON.stringify({ firstSeen: ago(30) }));
