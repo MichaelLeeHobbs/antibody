@@ -214,6 +214,25 @@ export default [
     cases: { fire: ['claude plugin disable antibody'], pass: ['claude plugin list'] },
   },
   {
+    id: 'core.confirm-bug-report',
+    tools: ['Bash', 'PowerShell'],
+    action: 'ask',
+    message: 'This files a public GitHub issue about antibody. The person asks for that and reads the draft first, so antibody asks them before it goes out.',
+    check(ctx) {
+      const files = ctx.stages.some((st) => {
+        const i = st.name === 'antibody' ? 0 : st.name === 'node' ? st.argv.findIndex((a) => /antibody(\.mjs)?$/i.test(a)) : -1;
+        if (i >= 0) return st.argv[i + 1] === 'bug' && st.argv.includes('--submit');
+        // gh straight at antibody's repo, as a way around the bug command.
+        return st.name === 'gh' && st.argv[1] === 'issue' && st.argv[2] === 'create' && /michaelleehobbs\/antibody\b/i.test(st.argv.join(' '));
+      });
+      return files ? { action: 'ask', message: this.message } : null;
+    },
+    cases: {
+      fire: ['antibody bug --submit /tmp/b.md --title "x"', 'node "C:/u/.claude/plugins/cache/antibody/antibody/0.4.0/bin/antibody.mjs" bug --submit b.md --title x', 'gh issue create --repo MichaelLeeHobbs/antibody --title x --body-file b.md', { tool: 'PowerShell', command: 'antibody bug --submit b.md --title x' }],
+      pass: ['antibody bug --out /tmp/b.md', 'antibody bug --event e123abc456', 'gh issue create --repo someone/else --title x', 'gh issue list --repo MichaelLeeHobbs/antibody'],
+    },
+  },
+  {
     id: 'core.stdin-hang',
     tools: ['Bash'],
     action: 'deny',

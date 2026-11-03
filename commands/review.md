@@ -2,7 +2,7 @@
 description: antibody's healing pass. Turn recent failures, stalls and notes into fixes and rules, verify them, and report.
 ---
 
-You are running antibody's review: a short, mostly unattended pass that turns the failures Claude hit recently into fixes that stop them recurring. The person reads your summary later. The best review says "fixed N things, nothing needs you".
+You are running antibody's review: a short, mostly unattended daily pass that turns the failures Claude hit recently into fixes that stop them recurring. The person reads your summary later. The best review says "fixed N things, nothing needs you".
 
 `$CLI` below means `antibody` (on PATH in your shell tools), or `node "${CLAUDE_PLUGIN_ROOT}/bin/antibody.mjs"` if the shell says `antibody` isn't found. The data folder is the one `$CLI` prints at the bottom of its help. Read `config.json` there first: `owner` is who reads this, `repoFixes` says where repo fixes go.
 
@@ -21,7 +21,7 @@ You are running antibody's review: a short, mostly unattended pass that turns th
 ## Steps
 
 1. `$CLI doctor`. If it fails, stop and report only that.
-2. `$CLI report --days 7 > <scratch file>` and read it all. Read the newest file in `reviews/`.
+2. `$CLI report --days 7 > <scratch file>` and read it all. The window is a rolling week even though the review runs daily, so rule hits and sessions add up for promotion; what earlier runs already covered has an issue now and drops out of "Not covered". Read the newest file in `reviews/`. If there has been no new failure, stall, block or note since that review, write a one-line review saying so, skip to the final message, and stop.
 3. `$CLI snapshot` and note the path (needed for step 6).
 4. **Cover what isn't covered.** For each group under "Not covered by any issue" that is a real failure of Claude's (not an expected non-zero exit, not a one-off network blip, and not a project defect: see "Only Claude's failures" above):
    - if an issue already describes it, add a `when` matcher to that issue so the next sighting gets the fix handed back;
@@ -37,10 +37,10 @@ You are running antibody's review: a short, mostly unattended pass that turns th
 8. **Recurring issues.** For each issue the report marks RECURRING, first apply the scope test: a project defect recurs because the project hasn't fixed it, and stronger rules won't help, so report it under "Not Claude's" and archive it with `--project`. Otherwise the fix didn't hold. Strengthen it one level: a note becomes a `learned.md` line, a `learned.md` line becomes a warn rule, a warn becomes a deny or rewrite. Record the fix with `$CLI issue fix <id> <text>`.
 9. **learned.md.** Keep it under 3 KB. A line goes here only when no rule can catch the shape (a habit, a convention, a fact about this host). Merge duplicates, and delete lines a rule now enforces.
 10. **Tidy.** Before archiving anything, check every issue with an `imported` field and no `cause`, whatever its status and including archived ones (`$CLI issues --all`). They predate this scope test: apply it once, archive project defects with `--project` (an archived issue keeps its matcher until you do), and add `"cause": "claude"` to the ones you keep so they aren't checked again. Then `$CLI archive` moves fixed, quiet issues out of the way. If `events.jsonl` is over 5 MB, run `$CLI rotate`.
-11. **Repo fixes.** This step is only for Claude failures whose fix happens to live in a repository (a missing helper script, a doc that misled Claude, a confusing script name). It is never for the project's own bugs; those go under "Not Claude's". For each such issue write a complete brief (the failure, the sightings, the fix, what done looks like) under "Repo fixes", at most `repoFixes.max` of them, never one already listed in the last review. If `repoFixes.mode` is `session` and a tool to start a session is available, start one per repo instead.
+11. **Repo fixes.** This step is only for Claude failures whose fix happens to live in a repository (a missing helper script, a doc that misled Claude, a confusing script name). It is never for the project's own bugs; those go under "Not Claude's". For each such issue write a complete brief (the failure, the sightings, the fix, what done looks like) under "Repo fixes", at most `repoFixes.max` of them, never one already listed in a review from the last 7 days. If `repoFixes.mode` is `session` and a tool to start a session is available, start one per repo instead.
 12. Write `reviews/<YYYY-MM-DD>.md` with these sections:
-    - **Headline:** better or worse than last week, in one sentence.
-    - **Numbers:** events by kind, sessions, issues by status, rule hits, compared with last week.
+    - **Headline:** better or worse than the previous review, in one sentence.
+    - **Numbers:** events by kind, sessions, issues by status, rule hits, compared with the previous review.
     - **Fixed this run:** each item with its evidence (test output, replay summary).
     - **Rules:** added, promoted, demoted or retired.
     - **Proposed:** tier-2 changes for a person, each complete.
@@ -55,7 +55,7 @@ Ask only when the answer needs the person's authority: a permission or security 
 - what goes wrong today, in one or two plain sentences, and how often;
 - the options, and what each means for them in practice;
 - your recommendation, and the default you will apply at the next run if they don't answer. For security changes, the default is "leave as is".
-If last week's review asked a question that got no answer, apply its default now and say so; don't ask it again.
+Reviews run daily, so give the person time: repeat an unanswered question (once, briefly) until it is 3 days old, then apply its default and say so; don't ask it again.
 
 ## Final message
 

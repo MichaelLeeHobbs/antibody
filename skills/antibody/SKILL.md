@@ -1,6 +1,6 @@
 ---
 name: antibody
-description: How to work with antibody's hook messages. Use when a tool call fails, is blocked or rewritten by antibody, when you stop a stuck task, or when asked about known failures, issues or rules.
+description: How to work with antibody's hook messages. Use when a tool call fails, is blocked or rewritten by antibody, when you stop a stuck task, when asked about known failures, issues or rules, or when the person wants to report a problem with antibody itself.
 ---
 
 # Working with antibody
@@ -29,5 +29,13 @@ Write the fix, not the story. If the note text has backticks or quotes, keep the
 - `antibody search <words>` finds known issues and their fixes.
 - `antibody issues` lists every issue with its computed status (open, watching, fixed, recurring).
 - `antibody rules` lists every rule, its state (enforce, shadow, retired) and its recent hits.
+
+## When antibody itself is wrong
+
+If the person asks to report a problem with antibody (not with their own work), follow `/antibody:bug`: draft with `antibody bug --out <file>`, show them all of it, and file with `antibody bug --submit` only after they confirm. Never file one on your own initiative.
+
+## Updates
+
+At session start antibody may tell the person a newer release is out. Updating is their call: give them the two commands from the message to run in a terminal. Don't run them yourself unless asked.
 
 The full command list is `antibody help`. `antibody` is on PATH in your shell tools; if the shell says it isn't found, use the full `node ".../bin/antibody.mjs"` form that antibody's own messages print.

@@ -11,7 +11,7 @@ export const CLI = join(ROOT, 'bin', 'antibody.mjs');
 
 export function tempHome() {
   const dir = mkdtempSync(join(tmpdir(), 'antibody-test-'));
-  return { dir, env: { ...process.env, ANTIBODY_HOME: join(dir, 'antibody'), CLAUDE_CONFIG_DIR: join(dir, 'claude'), CLAUDE_PLUGIN_ROOT: ROOT, ANTIBODY_DRY_RUN: '' }, done: () => rmSync(dir, { recursive: true, force: true }) };
+  return { dir, env: { ...process.env, ANTIBODY_HOME: join(dir, 'antibody'), CLAUDE_CONFIG_DIR: join(dir, 'claude'), CLAUDE_PLUGIN_ROOT: ROOT, ANTIBODY_DRY_RUN: '', ANTIBODY_UPDATE_URL: 'http://127.0.0.1:9/plugin.json', ANTIBODY_NO_UPDATE_CHECK: '', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '' }, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 export function hook(env, input) {
