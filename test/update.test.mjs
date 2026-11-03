@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -74,6 +74,30 @@ test('session start names a newer release once a day, and stays quiet when off o
   assert.equal(start({ ...h.env, ANTIBODY_NO_UPDATE_CHECK: '1' }), null, 'switched off by env');
   writeFileSync(join(h.env.ANTIBODY_HOME, 'config.json'), JSON.stringify({ updateCheck: false }));
   assert.equal(start(h.env), null, 'switched off in config');
+  h.done();
+});
+
+test('session start reminds about an overdue review, once a day', () => {
+  const h = tempHome();
+  const home = h.env.ANTIBODY_HOME;
+  const env = { ...h.env, ANTIBODY_NO_UPDATE_CHECK: '1' };
+  mkdirSync(join(home, 'state'), { recursive: true });
+  writeFileSync(join(home, 'events.jsonl'), '');
+  assert.equal(start(env), null, 'a fresh install gets two days');
+  const ago = (d) => new Date(Date.now() - d * 864e5).toISOString();
+  writeFileSync(join(home, 'state', 'review.json'), JSON.stringify({ firstSeen: ago(3) }));
+  assert.match(start(env).systemMessage, /review last ran never/);
+  assert.equal(start(env), null, 'told once today');
+  mkdirSync(join(home, 'reviews'), { recursive: true });
+  writeFileSync(join(home, 'reviews', `${ago(5).slice(0, 10)}.md`), 'x');
+  writeFileSync(join(home, 'state', 'review.json'), JSON.stringify({ firstSeen: ago(30) }));
+  assert.match(start(env).systemMessage, new RegExp(`review last ran ${ago(5).slice(0, 10)}`));
+  writeFileSync(join(home, 'reviews', `${new Date().toISOString().slice(0, 10)}.md`), 'x');
+  writeFileSync(join(home, 'state', 'review.json'), JSON.stringify({ firstSeen: ago(30) }));
+  assert.equal(start(env), null, 'reviewed today');
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ reviewReminder: false }));
+  rmSync(join(home, 'reviews'), { recursive: true });
+  assert.equal(start(env), null, 'switched off in config');
   h.done();
 });
 

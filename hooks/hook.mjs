@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync 
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { PLUGIN_ROOT, config, ensureDir, paths } from '../lib/config.mjs';
+import { PLUGIN_ROOT, config, ensureDir, lastReview, paths } from '../lib/config.mjs';
 import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHead } from '../lib/events.mjs';
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
@@ -181,13 +181,37 @@ async function post(input) {
   if (context.length) out({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: context.join('\n') } });
 }
 
-// Tell the person about a newer release. The check itself runs in its own process, at most once a
-// day, so a slow network never holds up the session; what it finds shows at the next start.
+// The review is meant to run daily. Two days without one (counted from the first session if there has
+// never been one) gets a reminder, at most once a day.
+const DAY = 864e5;
+function reviewNotice(now = Date.now()) {
+  if (config().reviewReminder === false || !existsSync(paths().events)) return null;
+  const f = stateFile('review.json');
+  const s = readJson(f) || {};
+  s.firstSeen = s.firstSeen || new Date(now).toISOString();
+  const last = lastReview();
+  const since = last ? Date.parse(last) : Date.parse(s.firstSeen);
+  let msg = null;
+  if (now - since >= 2 * DAY && !(s.toldAt && now - Date.parse(s.toldAt) < DAY)) {
+    msg = `antibody's review last ran ${last || 'never'}, so recent failures haven't been turned into fixes yet. Run /antibody:review, or schedule it daily (antibody schedule prints how).`;
+    s.toldAt = new Date(now).toISOString();
+  }
+  writeFileSync(f, JSON.stringify(s));
+  return msg;
+}
+
+// Tell the person about a newer release, and about a review that's overdue. The update check itself
+// runs in its own process, at most once a day, so a slow network never holds up the session; what it
+// finds shows at the next start.
 function sessionStart() {
-  if (!checkEnabled()) return;
-  if (due()) spawn(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'update-check', '--quiet'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
-  const msg = notice();
-  if (msg) out({ systemMessage: msg });
+  const msgs = [];
+  if (checkEnabled()) {
+    if (due()) spawn(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'update-check', '--quiet'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    msgs.push(notice());
+  }
+  msgs.push(reviewNotice());
+  const text = msgs.filter(Boolean).join('\n');
+  if (text) out({ systemMessage: text });
 }
 
 try {

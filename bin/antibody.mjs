@@ -4,7 +4,7 @@ import { appendFileSync, cpSync, existsSync, readdirSync, readFileSync, renameSy
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
-import { PLUGIN_ROOT, claudeDir, config, ensureDir, paths } from '../lib/config.mjs';
+import { PLUGIN_ROOT, claudeDir, config, ensureDir, lastReview, paths } from '../lib/config.mjs';
 import { append, commandHead, readEvents, redact, signature } from '../lib/events.mjs';
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
@@ -221,6 +221,9 @@ async function main() {
           if (en && en[1] === false) bad('the antibody plugin is disabled in settings.json (enabledPlugins)');
         } catch {}
       }
+      const last = lastReview();
+      if (!last || Date.now() - Date.parse(last) >= 2 * 864e5) say(`note  the review last ran ${last || 'never'}; it's meant to run daily: ${CLI} schedule`);
+      else ok(`the review last ran ${last}`);
       const have = installedVersion();
       const u = readState();
       if (!checkEnabled()) say(`note  antibody ${have}; the daily update check is off`);

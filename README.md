@@ -49,7 +49,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 5. **Check the install** with `antibody doctor`.
 
-`antibody schedule` shows how to run the review daily or weekly on your OS.
+6. **Schedule the review daily.** `antibody schedule` prints the command for your OS. A daily run means a mistake Claude made today has a fix or a rule by tomorrow. If the review hasn't run for two days, antibody reminds you at session start.
 
 ### Updating
 
