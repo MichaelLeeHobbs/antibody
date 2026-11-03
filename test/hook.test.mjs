@@ -121,6 +121,36 @@ test('stalls: a killed background task and an interrupted call are both logged',
   h.done();
 });
 
+test('a milestone with a stale task list gets one reminder, and only in a session that keeps a list', () => {
+  const h = tempHome();
+  cli(h.env, 'init');
+  const post = (tool, input) => hook(h.env, { hook_event_name: 'PostToolUse', ...call(tool, input), tool_response: 'ok' });
+  const commit = { command: 'cd /repo && git add -A && git commit -q -m "S1"' };
+
+  assert.equal(post('Bash', commit), null, 'no list, no reminder');
+  assert.equal(post('mcp__ccd_turn__update_plan', { advance: true }), null);
+  assert.equal(post('Bash', commit), null, 'a fresh list is fine');
+
+  // The list was last touched an hour ago.
+  const f = join(h.env.ANTIBODY_HOME, 'state', 'plans', 'test-session.json');
+  writeFileSync(f, JSON.stringify({ ts: Date.now() - 3600e3 }));
+  assert.equal(post('Bash', { command: 'pnpm test' }), null, 'not a milestone');
+  const told = post('Bash', { command: 'twg bb pull-requests create --title x --dest main' });
+  assert.match(told.additionalContext, /hasn't changed in 60 min, and this call was a pull request/);
+  assert.equal(post('Bash', commit), null, 'told once per stalePlanMs');
+  assert.deepEqual(events(h.env).filter((e) => e.kind === 'stale-plan').map((e) => e.tool), ['Bash']);
+
+  // Updating the list resets it; TodoWrite counts as a list too.
+  post('TodoWrite', { todos: [] });
+  assert.ok(JSON.parse(readFileSync(f, 'utf8')).ts > Date.now() - 60e3);
+  assert.equal(post('Bash', { command: 'git -C /repo push' }), null);
+
+  writeFileSync(join(h.env.ANTIBODY_HOME, 'config.json'), JSON.stringify({ stalePlanMs: 0 }));
+  writeFileSync(f, JSON.stringify({ ts: Date.now() - 3600e3 }));
+  assert.equal(post('Bash', commit), null, 'stalePlanMs 0 turns it off');
+  h.done();
+});
+
 test('secrets are redacted before they reach the log', () => {
   const h = tempHome();
   cli(h.env, 'init');

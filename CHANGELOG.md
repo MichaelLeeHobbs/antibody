@@ -2,6 +2,12 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- **A stale task list gets a reminder.** A long run could finish three PRs while its task list still showed step one, so the person checking in saw no progress. antibody now notes when a session last updated its list (TodoWrite, the Task tools, or the desktop app's `update_plan`). A commit, push, PR create/merge or Jira transition that lands after 15 minutes without an update reminds the model to update it, once per 15 minutes, and logs a `stale-plan` event. Sessions with no list hear nothing. `"stalePlanMs"` in `config.json` sets the window; 0 turns it off.
+
+By hand: nothing.
+
 ## 0.4.0 (2026-11-03)
 
 - **antibody tells you when a new release is out.** Claude Code doesn't update plugins from marketplaces outside Anthropic's own, or even light up the Update button for them. So once a day a new `SessionStart` hook looks up the latest version on GitHub (one GET of `plugin.json`, in its own process), and the next session start names the new version and the two commands to run. It never installs anything. `antibody update-check` checks right away and `doctor` shows the result. Off with `"updateCheck": false` in `config.json`, `ANTIBODY_NO_UPDATE_CHECK=1` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. The README has a new Network section.
