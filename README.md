@@ -18,7 +18,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 | | |
 |---|---|
-| **Capture** 🔬 | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't do any bookkeeping themselves. |
+| **Capture** 🔬 | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't do any bookkeeping themselves. When a session commits, pushes, opens a PR or moves a card while its task list has sat unchanged for 15 minutes, it is reminded to update the list, so the progress you check isn't stuck on step one. |
 | **Recall** 🧠 | When a call fails and the failure matches a known issue, antibody hands the fix straight back to the model in the same turn. That works in subagents too. |
 | **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person (refused outright when no one would see the question, as in auto mode), or **warn**. |
 | **Learn** 📚 | A review command turns recent events, the "what worked next" pairs and session notes into issues and new rules. |

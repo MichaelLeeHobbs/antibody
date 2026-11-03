@@ -13,6 +13,7 @@ antibody watches tool calls. It logs failures, stalls and blocks by itself. Befo
 - **A call was rewritten.** The context says what changed (for example `tail -5 a b` became `tail -n 5 a b`). The rewritten command is what ran.
 - **A failure came back with "Known issue AB-…".** Try that fix first. If it doesn't work, note what did.
 - **You stopped a task and antibody logged a possible stall.** If the task hung or misbehaved, note why it hung. If you stopped it on purpose, note "intended".
+- **Your task list hasn't changed while you committed, pushed, opened a PR or moved a card.** The person checks progress on that list. Update it so it shows the step you are on; if it already does, carry on.
 
 ## Notes are the one thing to do
 
