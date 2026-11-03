@@ -2,7 +2,7 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
-## Unreleased
+## 0.5.0 (2026-11-03)
 
 - **The update notice and review reminder now show in the desktop app.** The desktop app doesn't display a hook's `systemMessage`, so in 0.4.0 they reached only the CLI. The text now also goes to Claude, which mentions it in one line at the end of its first reply. Claude still doesn't run the update or the review unless you ask.
 - **Each notice shows in up to 3 new sessions a day instead of 1.** A session started by another session or a script could use up the single daily showing where nobody saw it. A new release starts the count again.

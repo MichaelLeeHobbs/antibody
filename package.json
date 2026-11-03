@@ -1,6 +1,6 @@
 {
   "name": "antibody",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A Claude Code plugin that catches Claude's own tool failures and stalls, hands back known fixes, and learns rules that stop them recurring.",
   "type": "module",
   "private": true,
