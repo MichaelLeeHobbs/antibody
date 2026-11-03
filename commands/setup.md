@@ -1,5 +1,5 @@
 ---
-description: Set antibody up after installing the plugin. Creates the data folder, checks the install, and shows the settings to add, including auto-update.
+description: Set antibody up after installing the plugin. Creates the data folder, checks the install, and shows the settings to add.
 ---
 
 You are walking the person through antibody's first-time setup. Keep it short: run the steps, then give one summary.
@@ -11,12 +11,5 @@ You are walking the person through antibody's first-time setup. Keep it short: r
 3. Show the two settings from the `init` output exactly as printed, each in its own code block:
    - the `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`. Offer to add it yourself, and add it only on a yes.
    - the `permissions` block for `~/.claude/settings.json`. Never edit `settings.json` yourself, and don't run `permissions --apply` yourself, even if asked: antibody keeps that a human step. Run `antibody permissions` (read-only) to show which entries are missing, then give the person the `permissions --apply` command from the `init` output to run in their own terminal. It backs the file up and adds only the missing entries. Merging by hand into the existing `allow` and `deny` lists works too.
-4. Check auto-update. Look at the `antibody` entry under `extraKnownMarketplaces` in `~/.claude/settings.json` first: if it sets `autoUpdate`, that value decides. Only if it doesn't, look at the `antibody` entry in `~/.claude/plugins/known_marketplaces.json`, where the `/plugin` toggle stores it. If the deciding value isn't `true`, tell the person that Claude Code leaves auto-update off for every marketplace except Anthropic's, so they would stay on this version and the Update button would stay greyed out. Show this entry for `extraKnownMarketplaces` in `~/.claude/settings.json` in its own code block, for them to add (again, never edit `settings.json` yourself):
-   ```json
-   "antibody": {
-     "source": { "source": "github", "repo": "MichaelLeeHobbs/antibody" },
-     "autoUpdate": true
-   }
-   ```
-   In the terminal UI, `/plugin` → Marketplaces → antibody → Enable auto-update does the same.
+4. Tell the person, in one or two lines, how updates work: Claude Code won't update antibody by itself, so antibody checks GitHub once a day and says at session start when a newer release is out, with the commands to run. They can turn that check off with `"updateCheck": false` in `config.json`. Letting Claude Code install updates by itself is optional, and the README's Updating section shows how. Don't recommend it either way.
 5. End with one short summary: the data folder, the packs that are on, and the event log path (`events.jsonl` in the data folder).

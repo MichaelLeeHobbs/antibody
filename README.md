@@ -39,20 +39,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
    If adding the marketplace fails while cloning (for example, git tries SSH and can't find your keys), add it by its HTTPS URL instead: `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. Adding a marketplace needs `git` on your PATH.
 
-   **Turn on auto-update.** Claude Code auto-updates only Anthropic's own marketplaces by default. For every other marketplace, antibody included, it's off, and a marketplace can't turn it on for you. Until you do, you stay on the version you installed and the Update button stays greyed out. Add `"autoUpdate": true` to the marketplace's entry under `extraKnownMarketplaces` in `~/.claude/settings.json` (create the entry if it isn't there):
-
-   ```json
-   "extraKnownMarketplaces": {
-     "antibody": {
-       "source": { "source": "github", "repo": "MichaelLeeHobbs/antibody" },
-       "autoUpdate": true
-     }
-   }
-   ```
-
-   Or, in the terminal UI, use `/plugin` → Marketplaces → antibody → Enable auto-update. Claude Code then refreshes the marketplace and updates the plugin in the background once a session is under way. That session keeps the old version until you run `/reload-plugins` or start a new session. If you set `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1`, plugin auto-update is off too unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
-
-2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you, and reminds you about auto-update if it's still off. To do them by hand instead, read on.
+2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
 
 3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
 
@@ -66,7 +53,11 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. With auto-update on (install step 1), Claude Code fetches new releases for you in the background, so you can skip the two commands below. You still need `/reload-plugins` or a new session to load the new hooks, and you should still check the changelog for anything to do by hand. Without auto-update, Claude Code never notices a new release on its own, not even to light up the Update button. To update by hand, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
+Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it.
+
+Claude Code doesn't auto-update plugins from marketplaces outside Anthropic's own, and it doesn't light up the Update button for them either. So antibody checks for you: once a day, at session start, it looks up the latest version on GitHub, and if there's a newer one it tells you at the start of your next session, with the commands to run. It never installs anything itself. `antibody update-check` checks right away, and `antibody doctor` shows the result. (Turn the check off in [Network](#network).)
+
+To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
 claude plugin marketplace update antibody
@@ -80,13 +71,26 @@ claude plugin update antibody@antibody
 
 (or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog.
 
+**Want updates without asking?** You can let Claude Code install new releases by itself. That means new antibody code, which runs on every tool call, arrives without you reading it first, so it's your call. To do it, add `"autoUpdate": true` to the antibody entry under `extraKnownMarketplaces` in `~/.claude/settings.json` (create the entry if it isn't there), or use `/plugin` → Marketplaces → antibody → Enable auto-update in the terminal UI:
+
+```json
+"extraKnownMarketplaces": {
+  "antibody": {
+    "source": { "source": "github", "repo": "MichaelLeeHobbs/antibody" },
+    "autoUpdate": true
+  }
+}
+```
+
+Claude Code then updates in the background once a session is under way; that session keeps the old version until `/reload-plugins` or a new session. `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1` turn plugin auto-update off too, unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
+
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
 ## Packs
 
 | Pack | What it does |
 |---|---|
-| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, or disable the plugin without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
+| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, disable the plugin, or file a bug report without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
 | `git-bash-windows` | For Windows with Git Bash: refuses heredocs and inline `node -e` holding backticks, backslashes or `${`, and `sed -i` (misses on CRLF checkouts). Rewrites `tail -5 a b` to `tail -n 5 a b`. |
 | `windows-orphans` | After a background task is stopped on Windows, it names node processes still holding a port. |
 
@@ -160,7 +164,13 @@ antibody only fixes Claude's own failures. When something is really a bug in you
 - `snapshot` and `replay --before`: re-run logged commands through old and new rules and list changed verdicts;
 - `report`;
 - `archive`, `rotate`;
-- `export`, `schedule`.
+- `export`, `schedule`;
+- `update-check`;
+- `bug`: draft a bug report about antibody, and file it with `gh` (see below).
+
+## Reporting a problem with antibody
+
+If antibody gets something wrong (a rule that misfires, a hook error, a confusing message), ask Claude to report it, or run `/antibody:bug`. Claude drafts the issue with `antibody bug`, which adds your antibody version, OS, packs and `doctor` output and takes out your home folder and anything that looks like a secret. Then it shows you the whole draft. Nothing is filed until you've read it and said yes. It's filed as a public issue on this repo with your own `gh` login, and antibody asks you once more before `gh` runs (in auto mode it refuses, and hands you the command instead). Without `gh`, you get the draft to paste at [github.com/MichaelLeeHobbs/antibody/issues/new](https://github.com/MichaelLeeHobbs/antibody/issues/new).
 
 ## The review
 
@@ -181,6 +191,16 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
 - Changes to settings, the plugin itself, its log and local guards are caught by `core` rules. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
+
+## Network
+
+antibody makes one kind of network request: the daily update check, a plain GET of [`.claude-plugin/plugin.json`](https://raw.githubusercontent.com/MichaelLeeHobbs/antibody/main/.claude-plugin/plugin.json) from this repo, the same file `claude plugin update` reads. It sends nothing about you or your work beyond the request itself (GitHub sees your IP address, as with any download), and it runs in its own process so it never slows a session down. Turn it off with any of:
+
+- `"updateCheck": false` in `config.json`;
+- `ANTIBODY_NO_UPDATE_CHECK=1`;
+- Claude Code's own `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`.
+
+Bug reports go out only when you ask for one and confirm it (see above).
 
 ## Known gaps (no vaccine is 100% effective)
 

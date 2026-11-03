@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // antibody's command line. Run with no arguments for the list of commands.
 import { appendFileSync, cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, ensureDir, paths } from '../lib/config.mjs';
-import { append, commandHead, readEvents, signature } from '../lib/events.mjs';
+import { append, commandHead, readEvents, redact, signature } from '../lib/events.mjs';
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
+import { CHANGELOG, REPO, UPDATE, checkEnabled, compareVersions, installedVersion, readState, refresh } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
 const args = process.argv.slice(2);
@@ -38,6 +41,13 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
                                         --apply adds them (backs the file up first). Run it
                                         yourself: a Claude session is asked before it can apply
   doctor                                check the install: data folder, packs, rules, old hooks
+  update-check                          look for a newer release now (antibody also looks once a
+                                        day at session start; "updateCheck": false turns it off)
+  bug [--event <id>] [--issue <id>] [--out <file>]
+                                        draft a bug report about antibody itself, with your
+                                        version and setup; home paths and secrets are taken out
+  bug --submit <file> --title <title>   file the draft on GitHub with gh. A person asks for this;
+                                        antibody asks them before it runs and refuses in auto mode
   note [<event id>] <text...>           record what fixed (or caused) a failure, stall or block
   issues [--all]                        every issue with its computed status
   issue show <id>                       one issue in full
@@ -211,7 +221,41 @@ async function main() {
           if (en && en[1] === false) bad('the antibody plugin is disabled in settings.json (enabledPlugins)');
         } catch {}
       }
+      const have = installedVersion();
+      const u = readState();
+      if (!checkEnabled()) say(`note  antibody ${have}; the daily update check is off`);
+      else if (u.latest && compareVersions(u.latest, have) > 0) say(`note  antibody ${u.latest} is out (you have ${have}); to update: ${UPDATE}`);
+      else ok(`antibody ${have}${u.checkedAt ? `, latest as of ${u.checkedAt.slice(0, 10)}${u.error ? ` (last check failed: ${u.error})` : ''}` : ''}`);
       process.exit(problems.length ? 1 : 0);
+    }
+
+    case 'update-check': {
+      const quiet = flag('--quiet');
+      const have = installedVersion();
+      const s = await refresh();
+      if (quiet) return;
+      if (s.error) fail(`Couldn't check for updates: ${s.error}`);
+      if (compareVersions(s.latest, have) > 0) say(`antibody ${s.latest} is out (you have ${have}).\nTo update, run in a terminal: ${UPDATE}\nWhat changed: ${CHANGELOG}`);
+      else say(`antibody ${have} is the latest.`);
+      return;
+    }
+
+    case 'bug': {
+      const submit = opt('--submit');
+      if (submit) {
+        const title = opt('--title') || fail('Give the issue a title: --title "<title>"');
+        if (!existsSync(submit)) fail(`No file ${submit}`);
+        const gh = (...a) => spawnSync('gh', a, { encoding: 'utf8', shell: false });
+        const manual = `Paste ${submit} into a new issue at https://github.com/${REPO}/issues/new instead.`;
+        if (gh('--version').status !== 0) fail(`gh isn't installed. ${manual}`);
+        if (gh('auth', 'status').status !== 0) fail(`gh isn't signed in (run: gh auth login). ${manual}`);
+        const r = gh('issue', 'create', '--repo', REPO, '--title', title, '--body-file', submit);
+        if (r.status !== 0) fail(`gh issue create failed: ${(r.stderr || r.stdout).trim()}\n${manual}`);
+        say(`Filed: ${r.stdout.trim()}`);
+        return;
+      }
+      say(bugDraft(opt('--event'), opt('--issue'), opt('--out')));
+      return;
     }
 
     case 'note': {
@@ -481,6 +525,54 @@ async function main() {
 }
 
 // ---------------------------------------------------------------------------------------------
+
+// A bug report about antibody itself, for the person to read before anything leaves the machine.
+// Logged events are already redacted; this runs redact again and takes out the home folder.
+function scrub(v) {
+  const homes = [homedir(), homedir().replace(/\\/g, '/'), homedir().replace(/\\/g, '\\\\')];
+  let s = redact(typeof v === 'string' ? v : JSON.stringify(v, null, 2));
+  for (const h of homes) s = s.split(h).join('~');
+  return s;
+}
+
+function bugDraft(eventId, issueId, outFile) {
+  const out = [];
+  const p = (s = '') => out.push(s);
+  p('## What happened');
+  p('');
+  p('<!-- In your own words: what antibody did, what you expected instead, and how to make it happen again. -->');
+  p('');
+  p('## Setup');
+  p('');
+  const doc = spawnSync(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'doctor'], { encoding: 'utf8' });
+  p(`- antibody ${installedVersion()}, Node ${process.versions.node}, ${process.platform} ${process.arch}`);
+  p(`- packs: ${config().packs.join(', ')}`);
+  p('');
+  p('```');
+  p(scrub(doc.stdout.trim()));
+  p('```');
+  if (eventId) {
+    const e = readEvents().find((x) => x.id === eventId) || fail(`No event ${eventId}`);
+    const { session_id, cwd, ...keep } = e;
+    p('');
+    p(`## Event ${e.id}`);
+    p('');
+    p('```json');
+    p(scrub(keep));
+    p('```');
+  }
+  if (issueId) {
+    const i = readIssue(issueId) || fail(`No issue ${issueId}`);
+    p('');
+    p(`## Issue ${i.id}: ${scrub(i.title)}`);
+    p('');
+    p(scrub(readText(join(i.archived ? paths().archive : paths().issues, `${i.id}.md`))));
+  }
+  const text = out.join('\n') + '\n';
+  if (!outFile) return text;
+  writeFileSync(outFile, text);
+  return `Draft written to ${outFile}. Read all of it before filing: it goes to a public GitHub issue.\n\n${text}`;
+}
 
 function report(n, { rules, errors }) {
   const since = days(n);
