@@ -50,7 +50,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
    }
    ```
 
-   Or, in the terminal UI, use `/plugin` → Marketplaces → antibody → Enable auto-update. Claude Code then refreshes the marketplace and updates the plugin at startup. If you set `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1`, plugin auto-update is off too unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
+   Or, in the terminal UI, use `/plugin` → Marketplaces → antibody → Enable auto-update. Claude Code then refreshes the marketplace and updates the plugin in the background once a session is under way. That session keeps the old version until you run `/reload-plugins` or start a new session. If you set `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1`, plugin auto-update is off too unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
 
 2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you, and reminds you about auto-update if it's still off. To do them by hand instead, read on.
 
@@ -66,7 +66,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. With auto-update on (install step 1), Claude Code updates antibody at startup and you can skip the rest of this section. Without it, Claude Code never notices a new release on its own, not even to light up the Update button. To update by hand, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
+Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it. With auto-update on (install step 1), Claude Code fetches new releases for you in the background, so you can skip the two commands below. You still need `/reload-plugins` or a new session to load the new hooks, and you should still check the changelog for anything to do by hand. Without auto-update, Claude Code never notices a new release on its own, not even to light up the Update button. To update by hand, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
 ```
 claude plugin marketplace update antibody
