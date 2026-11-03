@@ -37,6 +37,6 @@ If the person asks to report a problem with antibody (not with their own work), 
 
 ## Updates
 
-At session start antibody may tell the person a newer release is out. Updating is their call: give them the two commands from the message to run in a terminal. Don't run them yourself unless asked.
+At session start antibody may hand you a notice for the person: a newer release, or an overdue review. Their app may not show it, so mention it in one line at the end of your first reply. Updating is their call: give them the two commands from the message to run in a terminal. Don't run them yourself unless asked.
 
 The full command list is `antibody help`. `antibody` is on PATH in your shell tools; if the shell says it isn't found, use the full `node ".../bin/antibody.mjs"` form that antibody's own messages print.

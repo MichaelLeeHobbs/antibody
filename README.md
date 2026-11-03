@@ -55,7 +55,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it.
 
-Claude Code doesn't auto-update plugins from marketplaces outside Anthropic's own, and it doesn't light up the Update button for them either. So antibody checks for you: once a day, at session start, it looks up the latest version on GitHub, and if there's a newer one it tells you at the start of your next session, with the commands to run. It never installs anything itself. `antibody update-check` checks right away, and `antibody doctor` shows the result. (Turn the check off in [Network](#network).)
+Claude Code doesn't auto-update plugins from marketplaces outside Anthropic's own, and it doesn't light up the Update button for them either. So antibody checks for you: once a day, at session start, it looks up the latest version on GitHub, and if there's a newer one it tells you at the start of your next sessions (up to 3 a day), with the commands to run. The CLI shows it on screen; in the desktop app, which doesn't, Claude mentions it in one line at the end of its first reply. It never installs anything itself. `antibody update-check` checks right away, and `antibody doctor` shows the result. (Turn the check off in [Network](#network).)
 
 To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
 
@@ -212,7 +212,7 @@ On a clean branch cut from an up-to-date main, run `npm run release -- 0.4.0`. I
 - Background-task ids are read from the Bash tool's response text, and the stop tool names checked are `TaskStop`, `KillShell` and `KillBash`. If your version words these differently, a stall is still logged, but without the command that hung.
 - Whether a person will see an `ask` is read from the hook input's `permission_mode`. A Claude Code version that doesn't send it gets the plain `ask`, which in auto mode is settled without a person.
 - `doctor` checks the plugin's files against the release manifest that ships next to them, which catches a partial or local change but not someone who rewrites both. `doctor --online` closes that by comparing the manifest with the one published at the release tag on GitHub. A copy installed from a commit made after the release (Claude Code installs from main, not from the tag) shows its changed files as a note, not a failure.
-- The session-start messages (update and review reminders) use the hook's `systemMessage`. Claude Code accepts it in a headless session; whether every front end shows it on screen hasn't been checked on each one.
+- The session-start messages (update and review reminders) go out as the hook's `systemMessage`, which the CLI shows and the desktop app doesn't, and as context Claude passes on. In the desktop app you hear about them only through Claude's first reply.
 
 ## License
 
