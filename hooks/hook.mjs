@@ -10,6 +10,7 @@ import { PLUGIN_ROOT, config, ensureDir, lastReview, paths } from '../lib/config
 import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHead } from '../lib/events.mjs';
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
+import { dialectFor, stages } from '../lib/shell.mjs';
 import { checkEnabled, due, notice } from '../lib/update.mjs';
 
 const SHELLS = new Set(['Bash', 'PowerShell']);
@@ -133,12 +134,23 @@ const BG_ID = /(?:background with ID|shell[_ ]?id|task[_ ]?id|bash[_ ]?id|\bID)[
 // The task list a person watches: Claude Code's TodoWrite and Task tools, and the desktop app's
 // update_plan. A milestone is a call that finishes a piece of work the list should already show.
 const PLANS = /^(TodoWrite|TaskCreate|TaskUpdate|mcp__.+__update_plan)$/;
-const MILESTONES = [
-  ['a commit', /\bgit\s+(?:-C\s+\S+\s+)?commit\b/],
-  ['a push', /\bgit\s+(?:-C\s+\S+\s+)?push\b/],
-  ['a pull request', /\b(?:gh\s+pr|pull-requests)\s+(?:create|merge)\b/],
-  ['a card moving', /\bworkitem\s+transition\b/],
-];
+// Matched on parsed words, so quoted text, comments and heredoc bodies never count.
+const GIT_VALUE_OPTS = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace']);
+function milestone(tool, command) {
+  for (const st of stages(command, dialectFor(tool))) {
+    const a = st.argv;
+    if (st.name === 'git') {
+      let k = 1;
+      while (k < a.length && a[k].startsWith('-')) k += GIT_VALUE_OPTS.has(a[k]) ? 2 : 1;
+      if (a[k] === 'commit') return 'a commit';
+      if (a[k] === 'push') return 'a push';
+    }
+    const pair = (x, ys) => a.some((w, i) => w === x && ys.includes(a[i + 1]));
+    if ((st.name === 'gh' && pair('pr', ['create', 'merge'])) || pair('pull-requests', ['create', 'merge'])) return 'a pull request';
+    if (pair('workitem', ['transition'])) return 'a card moving';
+  }
+  return null;
+}
 const planFile = (input) => stateFile('plans', `${safe(input.session_id)}.json`);
 
 // A long run can leave its task list on step one while commits and PRs pile up (2026-11-03: two
@@ -147,7 +159,7 @@ const planFile = (input) => stateFile('plans', `${safe(input.session_id)}.json`)
 function stalePlan(input, tool, command) {
   const limit = config().stalePlanMs;
   if (!limit || !command) return null;
-  const what = MILESTONES.find(([, re]) => re.test(command))?.[0];
+  const what = milestone(tool, command);
   if (!what) return null;
   const f = planFile(input);
   const p = readJson(f);

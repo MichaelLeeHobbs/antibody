@@ -135,6 +135,10 @@ test('a milestone with a stale task list gets one reminder, and only in a sessio
   const f = join(h.env.ANTIBODY_HOME, 'state', 'plans', 'test-session.json');
   writeFileSync(f, JSON.stringify({ ts: Date.now() - 3600e3 }));
   assert.equal(post('Bash', { command: 'pnpm test' }), null, 'not a milestone');
+  // Text that only mentions a milestone doesn't count (and so doesn't use up the reminder).
+  for (const command of [`printf '%s\\n' 'git commit'`, 'echo done # git push', "cat > notes.md <<'EOF'\ngit commit -m x\nEOF", 'grep -n "gh pr create" README.md', 'git log --grep commit']) {
+    assert.equal(post('Bash', { command }), null, `not a milestone: ${command}`);
+  }
   const told = post('Bash', { command: 'twg bb pull-requests create --title x --dest main' });
   assert.match(told.additionalContext, /hasn't changed in 60 min, and this call was a pull request/);
   assert.equal(post('Bash', commit), null, 'told once per stalePlanMs');
@@ -144,6 +148,17 @@ test('a milestone with a stale task list gets one reminder, and only in a sessio
   post('TodoWrite', { todos: [] });
   assert.ok(JSON.parse(readFileSync(f, 'utf8')).ts > Date.now() - 60e3);
   assert.equal(post('Bash', { command: 'git -C /repo push' }), null);
+
+  // Global options before the subcommand, quoted paths with spaces, and PowerShell.
+  for (const [tool, command, what] of [
+    ['Bash', 'git -C "/tmp/my repo" push', 'a push'],
+    ['Bash', 'git -c user.name=x --no-pager commit -F - < msg.txt', 'a commit'],
+    ['Bash', 'gh pr merge 10 --squash', 'a pull request'],
+    ['PowerShell', "twg jira workitem transition --id 'MED-1' --transition-id 31", 'a card moving'],
+  ]) {
+    writeFileSync(f, JSON.stringify({ ts: Date.now() - 3600e3 }));
+    assert.match(post(tool, { command })?.additionalContext ?? '', new RegExp(`this call was ${what}\\.`), command);
+  }
 
   writeFileSync(join(h.env.ANTIBODY_HOME, 'config.json'), JSON.stringify({ stalePlanMs: 0 }));
   writeFileSync(f, JSON.stringify({ ts: Date.now() - 3600e3 }));
