@@ -8,6 +8,7 @@ import { PLUGIN_ROOT, claudeDir, config, ensureDir, lastReview, paths } from '..
 import { append, commandHead, readEvents, redact, signature } from '../lib/events.mjs';
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
+import { MANIFEST, readManifest, sameFiles, verifyFiles } from '../lib/manifest.mjs';
 import { CHANGELOG, REPO, UPDATE, checkEnabled, compareVersions, installedVersion, readState, refresh } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
@@ -40,7 +41,9 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
   permissions [--apply] [--file <path>] show the permission entries settings.json is missing;
                                         --apply adds them (backs the file up first). Run it
                                         yourself: a Claude session is asked before it can apply
-  doctor                                check the install: data folder, packs, rules, old hooks
+  doctor [--online]                     check the install: data folder, packs, rules, the plugin's
+                                        files against the release manifest; --online also checks
+                                        that manifest against the one published at the release tag
   update-check                          look for a newer release now (antibody also looks once a
                                         day at session start; "updateCheck": false turns it off)
   bug [--event <id>] [--issue <id>] [--out <file>]
@@ -197,6 +200,7 @@ async function main() {
     }
 
     case 'doctor': {
+      const online = flag('--online');
       const p = paths();
       const problems = [];
       const ok = (s) => say(`ok    ${s}`);
@@ -229,6 +233,22 @@ async function main() {
       if (!checkEnabled()) say(`note  antibody ${have}; the daily update check is off`);
       else if (u.latest && compareVersions(u.latest, have) > 0) say(`note  antibody ${u.latest} is out (you have ${have}); to update: ${UPDATE}`);
       else ok(`antibody ${have}${u.checkedAt ? `, latest as of ${u.checkedAt.slice(0, 10)}${u.error ? ` (last check failed: ${u.error})` : ''}` : ''}`);
+      const local = readManifest(PLUGIN_ROOT);
+      const v = verifyFiles(PLUGIN_ROOT, local);
+      if (!v) say(`note  no release file manifest (${MANIFEST}), so the plugin's files can't be checked; normal in a development copy`);
+      else if (v.version !== have) say(`note  the file manifest is for ${v.version}, not ${have}; files not checked`);
+      else if (v.changed.length || v.missing.length) {
+        // Not a FAIL on its own: a copy installed from a commit after the release differs too.
+        say(`note  ${v.changed.length + v.missing.length} plugin file(s) differ from the ${v.version} release: ${[...v.changed, ...v.missing.map((f) => `${f} (missing)`)].slice(0, 8).join(', ')}`);
+        say(`      a later commit, or a local change; reinstall to be sure: claude plugin uninstall antibody@antibody, then claude plugin install antibody@antibody`);
+      } else ok(`plugin files match the ${v.version} release manifest`);
+      if (online && local) {
+        try {
+          const res = await fetch(`https://raw.githubusercontent.com/${REPO}/v${local.version}/${MANIFEST}`, { signal: AbortSignal.timeout(8000), headers: { 'user-agent': 'antibody-doctor' } });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          sameFiles(await res.json(), local) ? ok(`the manifest matches the one published at tag v${local.version}`) : bad(`the manifest differs from the one published at tag v${local.version}: this copy isn't that release`);
+        } catch (e) { say(`note  couldn't fetch the v${local.version} manifest from GitHub: ${e.message}`); }
+      }
       process.exit(problems.length ? 1 : 0);
     }
 

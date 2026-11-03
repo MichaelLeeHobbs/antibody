@@ -194,20 +194,25 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 ## Network
 
-antibody makes one kind of network request: the daily update check, a plain GET of [`.claude-plugin/plugin.json`](https://raw.githubusercontent.com/MichaelLeeHobbs/antibody/main/.claude-plugin/plugin.json) from this repo, the same file `claude plugin update` reads. It sends nothing about you or your work beyond the request itself (GitHub sees your IP address, as with any download), and it runs in its own process so it never slows a session down. Turn it off with any of:
+antibody makes one automatic network request, the daily update check. It's a plain GET of [`.claude-plugin/plugin.json`](https://raw.githubusercontent.com/MichaelLeeHobbs/antibody/main/.claude-plugin/plugin.json) from this repo, the same file `claude plugin update` reads. It sends nothing about you or your work beyond the request itself (GitHub sees your IP address, as with any download), and it runs in its own process so it never slows a session down. Turn it off with any of:
 
 - `"updateCheck": false` in `config.json`;
 - `ANTIBODY_NO_UPDATE_CHECK=1`;
 - Claude Code's own `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`.
 
-Bug reports go out only when you ask for one and confirm it (see above).
+Two more requests happen only when you run them: `antibody update-check`, and `antibody doctor --online`, which fetches the release's file manifest from GitHub. Bug reports go out only when you ask for one and confirm it (see above).
+
+## Releasing (maintainers)
+
+On a clean branch cut from an up-to-date main, run `npm run release -- 0.4.0`. It bumps `package.json` and `plugin.json`, dates the changelog's `## Unreleased` heading, and writes `.claude-plugin/files.json`, the manifest `doctor` checks installs against. It changes files only, then prints the rest: commit, merge while the branch is up to date with main, and tag the merge commit `v0.4.0`. Bumping the version on main is the release, because Claude Code and the update check both read main's `plugin.json`.
 
 ## Known gaps (no vaccine is 100% effective)
 
 - `warn` relies on PreToolUse `additionalContext` reaching the model without a permission decision. The hook docs don't confirm this, so check it in your version.
 - Background-task ids are read from the Bash tool's response text, and the stop tool names checked are `TaskStop`, `KillShell` and `KillBash`. If your version words these differently, a stall is still logged, but without the command that hung.
 - Whether a person will see an `ask` is read from the hook input's `permission_mode`. A Claude Code version that doesn't send it gets the plain `ask`, which in auto mode is settled without a person.
-- `doctor` doesn't yet verify the plugin's files against release hashes.
+- `doctor` checks the plugin's files against the release manifest that ships next to them, which catches a partial or local change but not someone who rewrites both. `doctor --online` closes that by comparing the manifest with the one published at the release tag on GitHub. A copy installed from a commit made after the release (Claude Code installs from main, not from the tag) shows its changed files as a note, not a failure.
+- The session-start messages (update and review reminders) use the hook's `systemMessage`. Claude Code accepts it in a headless session; whether every front end shows it on screen hasn't been checked on each one.
 
 ## License
 

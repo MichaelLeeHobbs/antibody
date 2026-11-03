@@ -1,12 +1,14 @@
 # Changelog
 
-Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json`. "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
+Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
 ## Unreleased (0.4.0)
 
 - **antibody tells you when a new release is out.** Claude Code doesn't update plugins from marketplaces outside Anthropic's own, or even light up the Update button for them. So once a day a new `SessionStart` hook looks up the latest version on GitHub (one GET of `plugin.json`, in its own process), and the next session start names the new version and the two commands to run. It never installs anything. `antibody update-check` checks right away and `doctor` shows the result. Off with `"updateCheck": false` in `config.json`, `ANTIBODY_NO_UPDATE_CHECK=1` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`. The README has a new Network section.
 - **`antibody bug` and `/antibody:bug` report a problem with antibody itself.** Only when you ask: Claude drafts the issue with your version, OS, packs and `doctor` output, with your home folder and secrets taken out, and shows you all of it. `antibody bug --submit <file> --title <t>` files it on GitHub with your `gh` login. A new core rule, `core.confirm-bug-report`, asks you before that runs (and before any `gh issue create` aimed at this repo), and refuses in auto mode.
 - **The review runs daily.** `/antibody:review` is written for a daily run: it still reads a rolling week (so shadow rules can collect hits for promotion), stops after one line when nothing new happened, compares with the previous review, and gives an unanswered question 3 days before applying its default. Setup shows the `antibody schedule` command. When the review hasn't run for two days, session start reminds you (once a day; `"reviewReminder": false` turns it off), and `doctor` shows when it last ran.
+- **`doctor` checks the plugin's files.** Releases ship `.claude-plugin/files.json`, a SHA-256 for every file (line endings folded, so Windows checkouts match). `doctor` notes any file that differs or is missing, and `doctor --online` also checks the manifest against the copy published at the release tag. `doctor` now shows the version, the last update check and the last review too.
+- **`npm run release -- <x.y.z>`** prepares a release: bumps both version files, dates the changelog and writes the manifest. Committing, merging and tagging stay manual.
 - **Auto-update is now an informed choice, not a setup step.** The README explains how to turn it on and what it means (new code that runs on every tool call, installed without review). `/antibody:setup` no longer pushes it.
 
 By hand: nothing. To get updates without asking, see "Want updates without asking?" in the README.
