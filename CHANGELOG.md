@@ -2,6 +2,10 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json`. "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- README and `/antibody:setup`: turn on auto-update. Claude Code leaves it off for every marketplace except Anthropic's, so without `"autoUpdate": true` on the `antibody` entry in `extraKnownMarketplaces` you stay on the version you installed and the Update button stays greyed out. Setup now checks for it and shows the entry to add.
+
 ## 0.3.0 (2026-11-02)
 
 - **`antibody permissions [--apply]`** merges antibody's permission entries into `~/.claude/settings.json` for you. Without `--apply` it lists what's missing; with it, it backs the file up and adds only the missing entries. Run it in your own terminal: from a Claude session it asks you first, and in auto mode it is refused. `--file <path>` picks another settings file.
