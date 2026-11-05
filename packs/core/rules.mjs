@@ -250,6 +250,24 @@ export default [
     },
   },
   {
+    id: 'core.confirm-apply',
+    tools: ['Bash', 'PowerShell'],
+    action: 'ask',
+    message: "This applies one of the review's tier-2 proposals: a change to code or instructions that a person approves. The person runs it, or says yes here after reading the diff.",
+    check(ctx) {
+      const applies = ctx.stages.some((st) => {
+        const i = st.name === 'antibody' ? 0 : st.name === 'node' ? st.argv.findIndex((a) => /antibody(\.mjs)?$/i.test(a)) : -1;
+        // With no proposal named it only lists them; --dry-run only shows the diff.
+        return i >= 0 && st.argv[i + 1] === 'apply' && st.argv.length > i + 2 && !st.argv.includes('--dry-run');
+      });
+      return applies ? { action: 'ask', message: this.message } : null;
+    },
+    cases: {
+      fire: ['antibody apply 2026-11-05 2', 'node "C:/u/.claude/plugins/cache/antibody/antibody/0.7.0/bin/antibody.mjs" apply 2026-11-05 2', { tool: 'PowerShell', command: 'antibody apply 2026-11-05 2' }],
+      pass: ['antibody apply', 'antibody apply 2026-11-05 2 --dry-run', 'antibody guard port legacy.twg r.json'],
+    },
+  },
+  {
     id: 'core.stdin-hang',
     tools: ['Bash'],
     action: 'deny',

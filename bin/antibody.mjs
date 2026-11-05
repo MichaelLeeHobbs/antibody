@@ -3,12 +3,14 @@
 import { appendFileSync, cpSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, ensureDir, lastReview, paths } from '../lib/config.mjs';
 import { append, commandHead, readEvents, redact, signature } from '../lib/events.mjs';
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
 import { MANIFEST, readManifest, sameFiles, verifyFiles } from '../lib/manifest.mjs';
+import { portGuard } from '../lib/port.mjs';
+import { diff, listProposals, loadProposal } from '../lib/proposals.mjs';
 import { CHANGELOG, REPO, UPDATE, changes, checkEnabled, compareVersions, installedVersion, markSeen, readState, refresh, seenVersion } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
@@ -67,6 +69,15 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
   rules [--state shadow|enforce|retired] every rule with its hits in the last 30 days
   rule add <file.json>                  add local data rule(s); new rules start in shadow
   rule promote|demote|retire <id>       change a rule's state
+  guard port <guard id> <rules.json> [--apply] [--days N]
+                                        check that data rules do what a local guard does: their own
+                                        cases, each other's, and every command logged in the last N
+                                        days (default 90); --apply adds them in the guard's state and
+                                        retires the guard
+  apply [<review date> <n>] [--dry-run] apply a review's tier-2 proposal: shows the diff, backs the
+                                        files up, applies it and runs test, putting the files back if
+                                        test gets worse. With no arguments, lists the proposals. Run
+                                        it yourself: a Claude session is asked before it can apply
   test                                  run every rule's own cases (exit 1 on any failure)
   snapshot                              copy local rules and guards aside, for replay --before
   replay [--before <snapshot>] [--days N]  re-run logged commands through the rules
@@ -437,6 +448,105 @@ async function main() {
       return;
     }
 
+    case 'guard': {
+      const usage = 'Usage: guard port <guard id> <rules.json> [--apply] [--days N]';
+      if (args.shift() !== 'port') fail(usage);
+      const apply = flag('--apply');
+      const n = Number(opt('--days', '90'));
+      const [id, file] = args;
+      if (!id || !file) fail(usage);
+      const { rules } = await loadRules();
+      const guards = rules.filter((x) => x.source === 'guard');
+      const g = guards.find((x) => x.id === id || x.file === id || x.file === `${id}.mjs`) || fail(`No local guard ${id}. Guards: ${guards.map((x) => `${x.id} (${x.file})`).join(', ') || 'none'}`);
+      if (g.state === 'retired') fail(`${g.id} is retired already.`);
+      let list;
+      try { list = [].concat(JSON.parse(readText(file))); } catch (e) { fail(`${file}: ${e.message}`); }
+      for (const r of list) {
+        if (!r.id || !/^[\w.-]+$/.test(r.id)) fail(`Each rule needs an id of letters, digits, dots or dashes: ${JSON.stringify(r).slice(0, 80)}`);
+        if (typeof r.check !== 'undefined') fail(`${r.id}: data rules cannot carry code`);
+        if (rules.some((x) => x.id === r.id)) fail(`${r.id} already exists`);
+        if (!r.cases?.fire?.length || !r.cases?.pass?.length) fail(`${r.id}: give at least one "fire" and one "pass" case`);
+      }
+      const res = portGuard(g, list, readEvents({ since: days(n) }));
+      say(`Porting ${g.id} (guards/${g.file}, ${g.state}) into ${list.length} data rules from ${basename(file)}`);
+      for (const o of res.own) {
+        say(`${o.fails.length ? 'FAIL' : 'ok  '}  ${o.id}  (${o.fire} fire, ${o.pass} pass)`);
+        for (const x of o.fails) say(`        ${JSON.stringify(x)}`);
+      }
+      if (res.conflicts.length) say('\nCaught by another rule in the set:');
+      for (const c of res.conflicts) say(`  FAIL  ${JSON.stringify(c.command).slice(0, 160)}: ${c.why}`);
+      if (res.changed.length) say('\nChanged from the guard on purpose (a case asks for it):');
+      for (const c of res.changed) say(`  guard ${c.guard} -> rules ${c.rules}  ${JSON.stringify(c.command).slice(0, 160)}  (${c.cases.join(', ')})`);
+      say(`\nReplay: ${res.replayed} other commands logged in the last ${n} days, ${res.unintended.length} verdicts differ from the guard`);
+      for (const u of res.unintended) say(`  FAIL  guard ${u.guard} -> rules ${u.rules}  ${String(u.ts || '').slice(0, 16)} ${JSON.stringify(u.command).slice(0, 160)}`);
+      if (!res.ok) fail('\nNot ported. Fix the rules above (or add a case that asks for the change), then run this again.');
+      if (!apply) {
+        say(`\nDry run: nothing changed. To switch over (the rules start ${g.state}, as the guard is; the guard is retired, its file kept): ${CLI} guard port ${g.id} ${file} --apply`);
+        return;
+      }
+      const out = join(paths().rules, `ported-${g.file.replace(/\.mjs$/, '')}.json`);
+      if (existsSync(out)) fail(`rules/${basename(out)} exists already`);
+      ensureDir(paths().rules);
+      const today = new Date().toISOString().slice(0, 10);
+      writeFileSync(out, JSON.stringify(list.map((r) => ({ ...r, state: g.state, ported: g.id, stateChanged: today })), null, 2) + '\n');
+      say(`\nadded ${list.length} rules (${g.state}) to rules/${basename(out)}`);
+      say(`${g.id}: ${g.state} -> retired (saved in ${saveRuleState(g.id, 'retired')}). To undo: ${CLI} rule promote ${g.id}, and remove rules/${basename(out)}`);
+      return;
+    }
+
+    case 'apply': {
+      const dry = flag('--dry-run');
+      const [date, n] = args;
+      if (!date) {
+        const list = listProposals();
+        for (const p of list) say(`${(p.applied ? `applied ${p.applied.slice(0, 10)}` : 'open').padEnd(18)}  ${p.date} ${p.n}  ${p.title}`);
+        say(list.length ? `To apply one, run this in your own terminal: ${CLI} apply <date> <n>` : 'No proposals.');
+        return;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d+$/.test(n || '')) fail('Usage: apply <review date> <n>, for example: apply 2026-11-05 2');
+      let lp;
+      try { lp = loadProposal(date, n); } catch (e) { fail(e.message); }
+      const { file, proposal, plan, files } = lp;
+      say(`Proposal ${date} #${n}: ${proposal.title}${proposal.issue ? ` (${proposal.issue})` : ''}`);
+      if (proposal.why) say(proposal.why);
+      say('');
+      say(diff(plan));
+      say('');
+      if (!files.length) { say('Already applied; nothing to change.'); return; }
+      if (dry) { say(`Dry run: nothing changed. To apply it, run this in your own terminal: ${CLI} apply ${date} ${n}`); return; }
+      const testRun = () => {
+        const r = spawnSync(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'test'], { encoding: 'utf8' });
+        const m = (r.stdout || '').match(/(\d+) rules, (\d+) failing/);
+        return { failing: m ? Number(m[2]) : Infinity, summary: m ? m[0] : `test didn't finish: ${(r.stderr || '').trim().split('\n')[0]}`, out: r.stdout };
+      };
+      const before = testRun();
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const done = [];
+      for (const f of files) {
+        if (f.existed) {
+          f.backup = `${f.full}.antibody-backup-${stamp}`;
+          cpSync(f.full, f.backup);
+          say(`Backed up ${f.name} to ${f.backup}`);
+        } else ensureDir(dirname(f.full));
+        const tmp = `${f.full}.antibody-tmp`;
+        writeFileSync(tmp, f.crlf ? f.after.replace(/\n/g, '\r\n') : f.after);
+        renameSync(tmp, f.full);
+        done.push(f);
+      }
+      const after = testRun();
+      if (after.failing > before.failing) {
+        for (const f of done) f.backup ? cpSync(f.backup, f.full) : rmSync(f.full, { force: true });
+        say(after.out.split('\n').filter((l) => l.startsWith('FAIL') || l.startsWith('    ')).join('\n'));
+        fail(`antibody test got worse (${before.summary} before, ${after.summary} after), so the files are back as they were. Nothing changed; tell the next review.`);
+      }
+      const p = JSON.parse(readText(file));
+      p.applied = new Date().toISOString();
+      writeFileSync(file, JSON.stringify(p, null, 2) + '\n');
+      append({ kind: 'note', text: `applied review proposal ${date} #${n}: ${proposal.title}`, cwd: process.cwd() });
+      say(`Applied ${files.length} file(s). antibody test: ${after.summary}. Start a new Claude session to pick up a changed CLAUDE.md; guards and rules apply from the next call.`);
+      return;
+    }
+
     case 'test': {
       const { rules, errors } = await loadRules();
       let bad = errors.length;
@@ -468,7 +578,10 @@ async function main() {
       const uniq = events.filter((e) => (seen.has(e.tool + e.command) ? false : seen.add(e.tool + e.command)));
       const now = (await loadRules()).rules;
       if (before) {
-        const old = (await loadRules({ rulesDir: join(before, 'rules'), guardsDir: join(before, 'guards') })).rules;
+        // The snapshot's own config.json says which rules were retired or demoted then, not today's.
+        let then = {};
+        try { then = JSON.parse(readText(join(before, 'config.json'))); } catch {}
+        const old = (await loadRules({ packs: then.packs || config().packs, rulesDir: join(before, 'rules'), guardsDir: join(before, 'guards'), ruleState: then.ruleState || {} })).rules;
         let changed = 0;
         for (const e of uniq) {
           const a = verdictOf(e, old);

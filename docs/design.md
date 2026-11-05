@@ -12,7 +12,7 @@ So:
 
 - **Capture is automatic.** A session's only optional duty is a one-line `note`.
 - **Recall at the moment of failure.** The failure hook matches the event against issue matchers and returns the fix as context.
-- **Rules are data.** The healer adds and tunes JSON rules. It never writes code; code (packs and local guards) is human-reviewed.
+- **Rules are data.** The healer adds and tunes JSON rules. It never writes code; code (packs and local guards) is human-reviewed. To keep that from stalling fixes, the healer ports a guard's checks into data rules when they fit (`guard port`, checked against the guard on every logged command), and writes what stays code as a patch the person applies with one command (`apply`), never as a diff to type in.
 - **Evidence gates every rule.** New rules start in shadow. Promotion needs hits across sessions with none disputed, every case passing, and a clean replay against logged traffic.
 - **Status is computed** from recurrence after the fix.
 - **"What worked next" is data.** After a failure, the next similar successful call in the session is logged as a recovery: the fix, written by the model that hit the problem.
