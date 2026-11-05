@@ -2,7 +2,7 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
-## Unreleased
+## 0.6.0 (2026-11-05)
 
 - **What's new stays on screen until you say you've read it.** After an update, a release with a "By hand" step shows that step at every session start until you run `antibody whats-new --seen` (or tell Claude you've read it; antibody asks you before Claude can confirm, and refuses in auto mode). A notice shown a few times a day could be used up by sessions nobody watched, so a step you had to take could go unseen. A release with nothing to do by hand shows once. `antibody whats-new` prints the notes since the release you last confirmed (`--all` for every release), and `doctor` notes a step you haven't confirmed.
 - **`antibody schedule` recommends the desktop app's scheduled task first,** which runs under the app's login. A task the OS starts runs the `claude` CLI, whose own login can expire and fail the run with "OAuth session expired"; `schedule` now says so and how to get a lasting token.
