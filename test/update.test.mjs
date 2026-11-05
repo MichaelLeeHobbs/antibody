@@ -109,7 +109,8 @@ test('session start reminds about an overdue review, in three sessions a day', (
   const h = tempHome();
   const home = h.env.ANTIBODY_HOME;
   const env = { ...h.env, ANTIBODY_NO_UPDATE_CHECK: '1' };
-  mkdirSync(join(home, 'state'), { recursive: true });
+  // Caught up on what's new, so only the review reminder can speak.
+  writeState(h, { seenVersion: VERSION });
   writeFileSync(join(home, 'events.jsonl'), '');
   assert.equal(start(env), null, 'a fresh install gets two days');
   const ago = (d) => new Date(Date.now() - d * 864e5).toISOString();
