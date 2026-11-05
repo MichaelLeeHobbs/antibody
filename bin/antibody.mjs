@@ -578,7 +578,10 @@ async function main() {
       const uniq = events.filter((e) => (seen.has(e.tool + e.command) ? false : seen.add(e.tool + e.command)));
       const now = (await loadRules()).rules;
       if (before) {
-        const old = (await loadRules({ rulesDir: join(before, 'rules'), guardsDir: join(before, 'guards') })).rules;
+        // The snapshot's own config.json says which rules were retired or demoted then, not today's.
+        let then = {};
+        try { then = JSON.parse(readText(join(before, 'config.json'))); } catch {}
+        const old = (await loadRules({ packs: then.packs || config().packs, rulesDir: join(before, 'rules'), guardsDir: join(before, 'guards'), ruleState: then.ruleState || {} })).rules;
         let changed = 0;
         for (const e of uniq) {
           const a = verdictOf(e, old);

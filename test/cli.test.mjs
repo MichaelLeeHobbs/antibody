@@ -132,6 +132,16 @@ test('replay: a rule change shows up as changed verdicts against a snapshot', ()
   const r = cli(h.env, 'replay', '--before', snap);
   assert.match(r.out, /CHANGED allow -> deny:bb\.no-list/);
   assert.match(r.out, /1 verdicts changed/);
+
+  // A guard retired after the snapshot (its state lives in config.json): the before side keeps the
+  // state the snapshot's own config had, so the change shows.
+  cli(h.env, 'rule', 'retire', 'bb.no-list');
+  writeFileSync(join(h.env.ANTIBODY_HOME, 'guards', 'nolist.mjs'), "export default { id: 'local.nolist', check: (ctx) => (/pull-requests\\s+list/.test(ctx.command || '') ? 'use query' : null) };\n");
+  const snap2 = cli(h.env, 'snapshot').out.trim();
+  assert.match(cli(h.env, 'rule', 'retire', 'local.nolist').out, /config\.json ruleState/);
+  const r2 = cli(h.env, 'replay', '--before', snap2);
+  assert.match(r2.out, /CHANGED deny:local\.nolist -> allow/);
+  assert.match(r2.out, /1 verdicts changed/);
   h.done();
 });
 
