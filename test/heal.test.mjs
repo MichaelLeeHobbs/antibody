@@ -2,7 +2,7 @@
 // review's proposal as a ready patch.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { call, cli, hook, tempHome } from './helpers.mjs';
 
@@ -106,6 +106,38 @@ test('guard port --apply: the rules take the guard\'s state and the guard is ret
   s.h.done();
 });
 
+test('guard port: rewrites compare by their result, each logged directory counts, a case is fire or pass', async () => {
+  const { portGuard } = await import('../lib/port.mjs');
+  const { compile } = await import('../lib/rules.mjs');
+  const ev = (command, cwd = '/r') => ({ tool: 'Bash', command, cwd });
+
+  // A rewrite that lands on a different command than the guard's is a change.
+  const rw = compile({ id: 'g.rw', action: 'rewrite', check: (ctx) => (/^tail -\d+ /.test(ctx.command) ? { action: 'rewrite', command: ctx.command.replace(/^tail -(\d+)/, 'tail -n $1') } : null) }, 'guard');
+  const wrong = [{ id: 'r.rw', action: 'rewrite', match: { name: 'tail', command: '^tail -\\d+ ' }, rewrite: { replace: { find: '^tail -\\d+', with: 'tail -n 1' } }, message: 'm', cases: { fire: [{ command: 'tail -1 a.log', to: 'tail -n 1 a.log' }], pass: ['tail -n 5 a.log'] } }];
+  const r1 = portGuard(rw, wrong, [ev('tail -5 b.log')]);
+  assert.equal(r1.ok, false);
+  assert.deepEqual([r1.unintended[0].guard, r1.unintended[0].rules], ['rewrite to tail -n 5 b.log', 'rewrite to tail -n 1 b.log']);
+  const right = structuredClone(wrong);
+  right[0].rewrite.replace = { find: '^tail -(\\d+)', with: 'tail -n $1' };
+  assert.equal(portGuard(rw, right, [ev('tail -5 b.log')]).ok, true);
+
+  // The same command in two directories is replayed in both.
+  const cwd = compile({ id: 'g.cwd', check: (ctx) => (ctx.command === 'deploy' && ctx.cwd === '/prod' ? 'not here' : null) }, 'guard');
+  const everywhere = [{ id: 'r.deploy', match: { name: 'deploy' }, message: 'm', cases: { fire: ['deploy now'], pass: ['ls'] } }];
+  const r2 = portGuard(cwd, everywhere, [ev('deploy', '/prod'), ev('deploy', '/dev')]);
+  assert.equal(r2.replayed, 2);
+  assert.deepEqual(r2.unintended.map((u) => [u.command, u.guard, u.rules]), [['deploy', 'allow', 'deny']]);
+
+  // One rule's fire case can't be another's pass case.
+  const none = compile({ id: 'g.none', check: () => null }, 'guard');
+  const r3 = portGuard(none, [
+    { id: 'r.a', match: { name: 'x' }, message: 'm', cases: { fire: ['x y'], pass: ['ls'] } },
+    { id: 'r.b', match: { name: 'z' }, message: 'm', cases: { fire: ['z'], pass: ['x y'] } },
+  ]);
+  assert.equal(r3.ok, false);
+  assert.match(r3.conflicts[0].why, /a fire case of r\.a and a pass case of r\.b/);
+});
+
 function proposal(home, n, p) {
   const dir = join(home, 'reviews', 'proposals');
   mkdirSync(dir, { recursive: true });
@@ -166,6 +198,23 @@ test('apply: refuses stale patches and protected targets, and puts files back wh
     assert.match(r.err, /never patched|outside ~\/\.claude|relative to the data folder/, file);
   }
   assert.match(cli(h.env, 'apply', '2026-11-05', '9').err, /No proposal 2026-11-05 #9/);
+
+  // A folder inside ~/.claude that links into a protected one is judged by where it leads.
+  const claude = h.env.CLAUDE_CONFIG_DIR;
+  mkdirSync(join(claude, 'plugins', 'cache', 'x'), { recursive: true });
+  symlinkSync(join(claude, 'plugins', 'cache', 'x'), join(claude, 'helpers'), 'junction');
+  proposal(home, 8, { title: 'through a link', edits: [{ file: '~/.claude/helpers/helper.mjs', content: 'x' }] });
+  const link = cli(h.env, 'apply', '2026-11-05', '8');
+  assert.equal(link.code, 1);
+  assert.match(link.err, /never patched/);
+  assert.equal(existsSync(join(claude, 'plugins', 'cache', 'x', 'helper.mjs')), false);
+
+  // Applied once is applied, even when the new text contains the old.
+  writeFileSync(join(claude, 'CLAUDE.md'), 'timeout = 5\n');
+  proposal(home, 10, { title: 'longer timeout', edits: [{ file: '~/.claude/CLAUDE.md', find: 'timeout = 5', replace: 'timeout = 50' }] });
+  assert.equal(cli(h.env, 'apply', '2026-11-05', '10').code, 0);
+  assert.match(cli(h.env, 'apply', '2026-11-05', '10').out, /Already applied/);
+  assert.equal(readFileSync(join(claude, 'CLAUDE.md'), 'utf8'), 'timeout = 50\n');
   assert.match(cli(h.env, 'apply', 'yesterday', '1').err, /Usage: apply <review date> <n>/);
 
   // A patch that breaks a rule's own cases is undone.
