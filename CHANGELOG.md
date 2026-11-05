@@ -2,7 +2,7 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
-## Unreleased
+## 0.7.0 (2026-11-05)
 
 - **An approved fix to a local guard no longer needs a hand edit.** Guards are code, so the review can't change them, and on 2026-11-05 an approved one-line fix came back as a diff to type in. Now:
   - **The review ports guards into data rules,** which it can fix itself. `antibody guard port <guard id> <rules.json>` checks candidate rules against their own cases, against each other, and against the guard on every command logged in the last 90 days; a verdict that differs from the guard's must be asked for by a case. `--apply` adds the rules in the guard's state (enforced checks stay enforced) and retires the guard. The review tries a port before proposing a guard edit.
