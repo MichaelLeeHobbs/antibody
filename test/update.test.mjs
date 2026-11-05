@@ -52,6 +52,27 @@ test('update-check reads the latest version and says what to run', async () => {
   }
 });
 
+test('an update check in flight keeps a confirmation written meanwhile', async () => {
+  const h = tempHome();
+  writeState(h, { seenVersion: '0.1.0', toldCount: 1 });
+  // The confirmation lands while the request is out.
+  const server = createServer((req, res) => {
+    writeState(h, { seenVersion: '9.9.9', toldCount: 2 });
+    res.end(JSON.stringify({ version: '99.0.0' }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    await promisify(execFile)(process.execPath, [CLI, 'update-check', '--quiet'], { env: { ...h.env, ANTIBODY_UPDATE_URL: `http://127.0.0.1:${server.address().port}/plugin.json` } });
+    const s = JSON.parse(readFileSync(join(h.env.ANTIBODY_HOME, 'state', 'update.json'), 'utf8'));
+    assert.equal(s.latest, '99.0.0');
+    assert.equal(s.seenVersion, '9.9.9');
+    assert.equal(s.toldCount, 2);
+  } finally {
+    server.close();
+    h.done();
+  }
+});
+
 test('a failed check is reported and not retried until tomorrow', () => {
   const h = tempHome();
   const r = cli(h.env, 'update-check');
@@ -128,5 +149,70 @@ test('bug drafts a report without home paths, and submit needs a title and a per
   const pre = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `antibody bug --submit ${out} --title x` }, { permission_mode: 'auto' }) });
   assert.equal(pre.permissionDecision, 'deny', 'no person in auto mode');
   assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `antibody bug --submit ${out} --title x` }, { permission_mode: 'default' }) }).permissionDecision, 'ask');
+  h.done();
+});
+
+// A copy of the plugin at a pretend version, with a changelog of its own.
+function fakePlugin(h, version, log) {
+  const root = join(h.dir, 'plugin');
+  mkdirSync(join(root, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(root, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'antibody', version }));
+  writeFileSync(join(root, 'CHANGELOG.md'), log);
+  return { ...h.env, CLAUDE_PLUGIN_ROOT: root, ANTIBODY_NO_UPDATE_CHECK: '1' };
+}
+
+const LOG = '# Changelog\r\n\r\n## Unreleased\r\n\r\n- next\r\n\r\nBy hand: later.\r\n\r\n## 0.7.0 (2026-12-01)\r\n\r\n- seven\r\n\r\nBy hand: nothing.\r\n\r\n## 0.6.0 (2026-11-10)\r\n\r\n- six\r\n\r\nBy hand: make the review daily.\r\n\r\n## 0.5.0 (2026-11-03)\r\n\r\n- five\r\n\r\nBy hand: nothing.\r\n';
+
+test('what\'s new with a step by hand shows in every session until the person confirms it', () => {
+  const h = tempHome();
+  const env = fakePlugin(h, '0.7.0', LOG);
+  mkdirSync(h.env.ANTIBODY_HOME, { recursive: true });
+  writeFileSync(join(h.env.ANTIBODY_HOME, 'events.jsonl'), '');
+  for (let i = 0; i < 5; i++) {
+    const m = start(env);
+    assert.match(m.systemMessage, /updated to 0\.7\.0 \(from 0\.5\.0\) and needs a step by hand\. 0\.6\.0: make the review daily\./, `session ${i + 1}`);
+    assert.doesNotMatch(m.systemMessage, /later/, 'Unreleased is not a release');
+    assert.match(m.hookSpecificOutput.additionalContext, /only after the person says they've read/);
+  }
+  assert.match(cli(env, 'doctor').out, /note  0\.6\.0 need\(s\) a step by hand/);
+  const notes = cli(env, 'whats-new').out;
+  assert.match(notes, /## 0\.7\.0[\s\S]*## 0\.6\.0[\s\S]*whats-new --seen/);
+  assert.doesNotMatch(notes, /## 0\.5\.0/);
+  assert.match(cli(env, 'whats-new', '--all').out, /## 0\.5\.0/);
+  const pre = (mode) => hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'antibody whats-new --seen' }, { permission_mode: mode }) });
+  assert.equal(pre('auto').permissionDecision, 'deny', 'no person in auto mode');
+  assert.equal(pre('default').permissionDecision, 'ask');
+  assert.match(cli(env, 'whats-new', '--seen').out, /Marked antibody 0\.7\.0/);
+  assert.equal(start(env), null, 'confirmed');
+  assert.doesNotMatch(cli(env, 'doctor').out, /step by hand/);
+  assert.match(cli(env, 'whats-new').out, /Nothing new since 0\.7\.0/);
+  h.done();
+});
+
+test('what\'s new with nothing by hand shows once; a fresh install has nothing to catch up on', () => {
+  const h = tempHome();
+  const home = h.env.ANTIBODY_HOME;
+  let env = fakePlugin(h, '0.7.0', LOG);
+  writeState(h, { seenVersion: '0.6.0' });
+  assert.match(start(env).systemMessage, /updated to 0\.7\.0 \(from 0\.6\.0\); nothing to do by hand/);
+  assert.equal(start(env), null, 'shown once');
+  rmSync(home, { recursive: true });
+  assert.equal(start(env), null, 'no data folder, no notice');
+  assert.equal(cli(env, 'init').code, 0);
+  assert.equal(start(env), null, 'init counts as caught up');
+  env = fakePlugin(h, '0.8.0', LOG.replace('## Unreleased', '## 0.8.0 (2027-01-01)'));
+  assert.match(start(env).systemMessage, /updated to 0\.8\.0 \(from 0\.7\.0\) and needs a step by hand\. 0\.8\.0: later\./);
+  h.done();
+});
+
+test('schedule leads with the desktop app and prints a PowerShell-safe Windows command', () => {
+  const h = tempHome();
+  const out = cli({ ...h.env, ANTIBODY_HOME: join(h.dir, "it's here") }, 'schedule').out;
+  assert.match(out, /desktop app[\s\S]*\/antibody:review/);
+  assert.match(out, /claude setup-token/);
+  if (process.platform === 'win32') {
+    assert.match(out, /Register-ScheduledTask .*-WorkingDirectory '.*it''s here'/);
+    assert.doesNotMatch(out, /\\"/, 'no cmd.exe-style escapes');
+  }
   h.done();
 });

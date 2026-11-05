@@ -9,7 +9,7 @@ import { append, commandHead, readEvents, redact, signature } from '../lib/event
 import { createIssue, listIssues, readIssue, sightings, status, writeIssue, findMatches } from '../lib/issues.mjs';
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
 import { MANIFEST, readManifest, sameFiles, verifyFiles } from '../lib/manifest.mjs';
-import { CHANGELOG, REPO, UPDATE, checkEnabled, compareVersions, installedVersion, readState, refresh } from '../lib/update.mjs';
+import { CHANGELOG, REPO, UPDATE, changes, checkEnabled, compareVersions, installedVersion, markSeen, readState, refresh, seenVersion } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
 const args = process.argv.slice(2);
@@ -46,6 +46,9 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
                                         that manifest against the one published at the release tag
   update-check                          look for a newer release now (antibody also looks once a
                                         day at session start; "updateCheck": false turns it off)
+  whats-new [--all] [--seen]            the changelog since the release you last confirmed (--all:
+                                        every release); --seen confirms you've read it, which stops
+                                        the notice that otherwise shows at every session start
   bug [--event <id>] [--issue <id>] [--out <file>]
                                         draft a bug report about antibody itself, with your
                                         version and setup; home paths and secrets are taken out
@@ -135,6 +138,8 @@ async function main() {
       const owner = opt('--owner') || '';
       if (!existsSync(p.config)) writeFileSync(p.config, JSON.stringify({ packs, owner }, null, 2) + '\n');
       if (!existsSync(p.learned)) writeFileSync(p.learned, '# Learned rules (maintained by antibody\'s review)\n\nShort rules learned from repeat failures. The review keeps this file under 3 KB.\n');
+      // A new install has no old releases to catch up on.
+      if (!readState().seenVersion) markSeen(seenVersion());
       const gi = join(p.home, '.gitignore');
       if (!existsSync(gi)) writeFileSync(gi, 'events*.jsonl\nstate/\n');
       const home = tildeHome();
@@ -233,6 +238,8 @@ async function main() {
       if (!checkEnabled()) say(`note  antibody ${have}; the daily update check is off`);
       else if (u.latest && compareVersions(u.latest, have) > 0) say(`note  antibody ${u.latest} is out (you have ${have}); to update: ${UPDATE}`);
       else ok(`antibody ${have}${u.checkedAt ? `, latest as of ${u.checkedAt.slice(0, 10)}${u.error ? ` (last check failed: ${u.error})` : ''}` : ''}`);
+      const todo = changes(seenVersion(), have).filter((c) => c.byHand);
+      if (todo.length) say(`note  ${todo.map((c) => c.version).join(', ')} need(s) a step by hand you haven't confirmed: antibody whats-new`);
       const local = readManifest(PLUGIN_ROOT);
       const v = verifyFiles(PLUGIN_ROOT, local);
       if (!v) say(`note  no release file manifest (${MANIFEST}), so the plugin's files can't be checked; normal in a development copy`);
@@ -260,6 +267,21 @@ async function main() {
       if (s.error) fail(`Couldn't check for updates: ${s.error}`);
       if (compareVersions(s.latest, have) > 0) say(`antibody ${s.latest} is out (you have ${have}).\nTo update, run in a terminal: ${UPDATE}\nWhat changed: ${CHANGELOG}`);
       else say(`antibody ${have} is the latest.`);
+      return;
+    }
+
+    case 'whats-new': {
+      const have = installedVersion();
+      if (flag('--seen')) {
+        markSeen(have);
+        say(`Marked antibody ${have}'s notes as read; the what's-new notice stops showing.`);
+        return;
+      }
+      const since = flag('--all') ? '0.0.0' : seenVersion();
+      const list = changes(since, have);
+      if (!list.length) { say(`Nothing new since ${since}. antibody whats-new --all shows every release.`); return; }
+      say(list.map((c) => c.text).join('\n\n'));
+      if (list.some((c) => c.byHand) && compareVersions(have, seenVersion()) > 0) say(`\nOnce you've done the "By hand" steps above, run: antibody whats-new --seen`);
       return;
     }
 
@@ -533,12 +555,21 @@ async function main() {
     case 'schedule': {
       const home = paths().home;
       const run = 'claude -p "/antibody:review" --permission-mode acceptEdits';
+      // The desktop app's own scheduled task runs under the app's login. A task the OS starts runs the
+      // `claude` CLI, which keeps a login of its own; when that has expired the run fails with
+      // "OAuth session expired" in a window that closes before anyone reads it.
+      say('With the Claude desktop app, the simplest is one of its scheduled tasks: prompt "/antibody:review", daily.');
+      say('It runs under the app\'s own login. If you have a weekly one from an older setup, make it daily.\n');
+      say('Or let the OS run it. That uses the claude CLI\'s own login, not the app\'s, so check that `claude -p "hi"` works');
+      say('in a terminal first; for a login that lasts, run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN to it.');
       say('Run the review from the data folder, so its edits stay inside the working directory.');
       say('Never use --permission-mode bypassPermissions for it: the review must stay inside its allow list.\n');
-      if (process.platform === 'win32') say(`Windows (Task Scheduler, daily 09:00):\n  schtasks /create /sc daily /st 09:00 /tn antibody-review /tr "cmd /c cd /d \\"${home}\\" && ${run.replace(/"/g, '\\"')}"`);
+      // PowerShell, not schtasks: \" inside a PowerShell string isn't an escape, so the old schtasks line
+      // broke there. Single quotes take everything literally; a ' in the path doubles.
+      const ps = (s) => `'${s.replace(/'/g, "''")}'`;
+      if (process.platform === 'win32') say(`Windows (Task Scheduler, daily 09:00; paste into PowerShell):\n  Register-ScheduledTask -TaskName antibody-review -Trigger (New-ScheduledTaskTrigger -Daily -At 9am) -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries) -Action (New-ScheduledTaskAction -Execute cmd.exe -Argument ${ps(`/c ${run}`)} -WorkingDirectory ${ps(home)})\n  Try it now: Start-ScheduledTask antibody-review; then Get-ScheduledTaskInfo antibody-review shows LastTaskResult (0 is success).`);
       else if (process.platform === 'darwin') say(`macOS: add a launchd agent, or cron:\n  crontab -e\n  0 9 * * * cd "${home}" && ${run} >> "${home}/reviews/cron.log" 2>&1`);
       else say(`Linux (cron, daily 09:00):\n  crontab -e\n  0 9 * * * cd "${home}" && ${run} >> "${home}/reviews/cron.log" 2>&1`);
-      say('\nWith the Claude desktop app, a scheduled task with the prompt "/antibody:review" works as well.');
       return;
     }
 

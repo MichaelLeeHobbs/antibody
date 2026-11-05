@@ -11,7 +11,7 @@ import { append, errorText, isNoise, isRealTraffic, redact, signature, commandHe
 import { evaluate, loadRules, makeContext } from '../lib/rules.mjs';
 import { findMatches } from '../lib/issues.mjs';
 import { dialectFor, stages } from '../lib/shell.mjs';
-import { checkEnabled, due, mayTell, notice } from '../lib/update.mjs';
+import { checkEnabled, due, mayTell, notice, whatsNew } from '../lib/update.mjs';
 
 const SHELLS = new Set(['Bash', 'PowerShell']);
 const STOPPERS = new Set(['TaskStop', 'KillShell', 'KillBash']);
@@ -249,11 +249,12 @@ function reviewNotice(now = Date.now()) {
   return msg;
 }
 
-// Tell the person about a newer release, and about a review that's overdue. The update check itself
+// Tell the person what's new since an update they haven't confirmed, about a newer release, and about
+// a review that's overdue. The update check itself
 // runs in its own process, at most once a day, so a slow network never holds up the session; what it
 // finds shows at the next start.
 function sessionStart() {
-  const msgs = [];
+  const msgs = [whatsNew()];
   if (checkEnabled()) {
     if (due()) spawn(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'update-check', '--quiet'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
     msgs.push(notice());
@@ -263,7 +264,7 @@ function sessionStart() {
   // The CLI shows systemMessage, but the desktop app doesn't, so Claude gets the text too and passes it on.
   if (text) out({
     systemMessage: text,
-    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `antibody notice for the person (their app may not show it on screen): ${text}\nMention it to them in one line at the end of your first reply. Don't run the update or the review yourself unless they ask.` },
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `antibody notice for the person (their app may not show it on screen): ${text}\nMention it to them in one line at the end of your first reply. Don't run the update or the review yourself unless they ask. Run \`antibody whats-new --seen\` only after the person says they've read the what's-new notice; it then stops showing in every session.` },
   });
 }
 
