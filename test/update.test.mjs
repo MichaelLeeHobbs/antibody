@@ -52,6 +52,27 @@ test('update-check reads the latest version and says what to run', async () => {
   }
 });
 
+test('an update check in flight keeps a confirmation written meanwhile', async () => {
+  const h = tempHome();
+  writeState(h, { seenVersion: '0.1.0', toldCount: 1 });
+  // The confirmation lands while the request is out.
+  const server = createServer((req, res) => {
+    writeState(h, { seenVersion: '9.9.9', toldCount: 2 });
+    res.end(JSON.stringify({ version: '99.0.0' }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    await promisify(execFile)(process.execPath, [CLI, 'update-check', '--quiet'], { env: { ...h.env, ANTIBODY_UPDATE_URL: `http://127.0.0.1:${server.address().port}/plugin.json` } });
+    const s = JSON.parse(readFileSync(join(h.env.ANTIBODY_HOME, 'state', 'update.json'), 'utf8'));
+    assert.equal(s.latest, '99.0.0');
+    assert.equal(s.seenVersion, '9.9.9');
+    assert.equal(s.toldCount, 2);
+  } finally {
+    server.close();
+    h.done();
+  }
+});
+
 test('a failed check is reported and not retried until tomorrow', () => {
   const h = tempHome();
   const r = cli(h.env, 'update-check');
