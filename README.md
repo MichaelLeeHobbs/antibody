@@ -90,7 +90,7 @@ Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
 
 | Pack | What it does |
 |---|---|
-| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, disable the plugin, or file a bug report without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
+| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, disable the plugin, file a bug report, or confirm an update's what's-new notice without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
 | `git-bash-windows` | For Windows with Git Bash: refuses heredocs and inline `node -e` holding backticks, backslashes or `${`, and `sed -i` (misses on CRLF checkouts). Rewrites `tail -5 a b` to `tail -n 5 a b`. |
 | `windows-orphans` | After a background task is stopped on Windows, it names node processes still holding a port. |
 
@@ -165,7 +165,7 @@ antibody only fixes Claude's own failures. When something is really a bug in you
 - `report`;
 - `archive`, `rotate`;
 - `export`, `schedule`;
-- `update-check`;
+- `update-check`, `whats-new [--all] [--seen]`: the release notes since the release you last confirmed, and `--seen` to confirm them;
 - `bug`: draft a bug report about antibody, and file it with `gh` (see below).
 
 ## Reporting a problem with antibody
