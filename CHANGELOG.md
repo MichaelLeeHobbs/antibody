@@ -2,6 +2,14 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- **What's new stays on screen until you say you've read it.** After an update, a release with a "By hand" step shows that step at every session start until you run `antibody whats-new --seen` (or tell Claude you've read it; antibody asks you before Claude can confirm, and refuses in auto mode). A notice shown a few times a day could be used up by sessions nobody watched, so a step you had to take could go unseen. A release with nothing to do by hand shows once. `antibody whats-new` prints the notes since the release you last confirmed (`--all` for every release), and `doctor` notes a step you haven't confirmed.
+- **`antibody schedule` recommends the desktop app's scheduled task first,** which runs under the app's login. A task the OS starts runs the `claude` CLI, whose own login can expire and fail the run with "OAuth session expired"; `schedule` now says so and how to get a lasting token.
+- **The Windows schedule command works in PowerShell.** The old `schtasks` line escaped quotes the cmd.exe way, which PowerShell doesn't understand. It's now a `Register-ScheduledTask` command that sets the working folder, runs on battery and catches up a missed run.
+
+By hand: if your review still runs weekly (a desktop-app scheduled task, cron or Task Scheduler entry from before 0.4.0), make it daily; `antibody schedule` shows how.
+
 ## 0.5.0 (2026-11-03)
 
 - **The update notice and review reminder now show in the desktop app.** The desktop app doesn't display a hook's `systemMessage`, so in 0.4.0 they reached only the CLI. The text now also goes to Claude, which mentions it in one line at the end of its first reply. Claude still doesn't run the update or the review unless you ask.

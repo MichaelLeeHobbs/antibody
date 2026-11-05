@@ -233,6 +233,23 @@ export default [
     },
   },
   {
+    id: 'core.confirm-whats-new',
+    tools: ['Bash', 'PowerShell'],
+    action: 'ask',
+    message: 'This tells antibody the person has read what changed in the update, which stops the notice in every session. Only the person can say that, so antibody asks them.',
+    check(ctx) {
+      const seen = ctx.stages.some((st) => {
+        const i = st.name === 'antibody' ? 0 : st.name === 'node' ? st.argv.findIndex((a) => /antibody(\.mjs)?$/i.test(a)) : -1;
+        return i >= 0 && st.argv[i + 1] === 'whats-new' && st.argv.includes('--seen');
+      });
+      return seen ? { action: 'ask', message: this.message } : null;
+    },
+    cases: {
+      fire: ['antibody whats-new --seen', 'node "C:/u/.claude/plugins/cache/antibody/antibody/0.6.0/bin/antibody.mjs" whats-new --seen', { tool: 'PowerShell', command: 'antibody whats-new --seen' }],
+      pass: ['antibody whats-new', 'antibody whats-new --all', 'antibody doctor'],
+    },
+  },
+  {
     id: 'core.stdin-hang',
     tools: ['Bash'],
     action: 'deny',

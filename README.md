@@ -49,7 +49,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 5. **Check the install** with `antibody doctor`.
 
-6. **Schedule the review daily.** `antibody schedule` prints the command for your OS. A daily run means a mistake Claude made today has a fix or a rule by tomorrow. If the review hasn't run for two days, antibody reminds you at session start.
+6. **Schedule the review daily.** With the desktop app, a daily scheduled task with the prompt `/antibody:review` is simplest. Otherwise `antibody schedule` prints the command for your OS (it runs the `claude` CLI, which needs its own login). A daily run means a mistake Claude made today has a fix or a rule by tomorrow. If the review hasn't run for two days, antibody reminds you at session start.
 
 ### Updating
 
@@ -69,7 +69,7 @@ Then update the plugin itself:
 claude plugin update antibody@antibody
 ```
 
-(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog.
+(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog. After an update, that "By hand" step shows at every session start until you run `antibody whats-new --seen` (or tell Claude you've read it, and approve when antibody asks), so it can't be used up by sessions you never look at. `antibody whats-new` prints the notes since the release you last confirmed.
 
 **Want updates without asking?** You can let Claude Code install new releases by itself. That means new antibody code, which runs on every tool call, arrives without you reading it first, so it's your call. To do it, add `"autoUpdate": true` to the antibody entry under `extraKnownMarketplaces` in `~/.claude/settings.json` (create the entry if it isn't there), or use `/plugin` → Marketplaces → antibody → Enable auto-update in the terminal UI:
 
