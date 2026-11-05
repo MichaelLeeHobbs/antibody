@@ -22,6 +22,21 @@ test('every shipped rule passes its own cases', async () => {
   }
 });
 
+test('data rule: any and not hold sub-matches on the same stage', () => {
+  const link = compile({ id: 't.link', match: { name: 'twg', command: '\\blink\\s+artifact\\b', any: [{ hasFlag: '--url' }, { flagValue: { '--type': '^pull-?request$' } }] }, message: 'm' });
+  assert.equal(link.check(ctx('twg jira workitem link artifact --id MED-1 --url https://x'))?.action, 'deny');
+  assert.equal(link.check(ctx('twg jira workitem link artifact --type pull-request --id MED-1 --target https://x'))?.action, 'deny');
+  assert.equal(link.check(ctx('twg jira workitem link artifact --type pr --id MED-1 --target https://x')), null);
+  // `a && (b || c) && !d`: a write whose output is piped away, except a transition that only lists.
+  const hidden = compile({ id: 't.hidden', match: { name: 'twg', command: '\\b(update|transition)\\b', any: [{ next: '^head\\b' }, { redirect: '^/dev/null$' }], not: { command: '\\btransition\\b', lacksFlag: '--transition-id' } }, message: 'm' });
+  assert.equal(hidden.check(ctx('twg jira workitem update --id MED-1 | head')).action, 'deny');
+  assert.equal(hidden.check(ctx('twg jira workitem update --id MED-1 > /dev/null')).action, 'deny');
+  assert.equal(hidden.check(ctx('twg jira workitem transition --id MED-1 --transition-id 31 | head')).action, 'deny');
+  assert.equal(hidden.check(ctx('twg jira workitem transition --id MED-1 | head')), null, 'lists transitions only');
+  assert.equal(hidden.check(ctx('twg jira workitem update --id MED-1 > out.txt')), null);
+  assert.equal(hidden.check(ctx('twg jira workitem get MED-1 | head')), null, 'a read');
+});
+
 test('data rule: deny with flags and stage position', () => {
   const r = compile({ id: 't.get-id', match: { name: 'twg', command: '\\bworkitem\\s+get\\b', hasFlag: '--id' }, message: 'positional keys' });
   assert.equal(r.check(ctx('twg jira workitem get --id MED-1'))?.action, 'deny');

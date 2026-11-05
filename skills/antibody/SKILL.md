@@ -35,6 +35,10 @@ Write the fix, not the story. If the note text has backticks or quotes, keep the
 
 If the person asks to report a problem with antibody (not with their own work), follow `/antibody:bug`: draft with `antibody bug --out <file>`, show them all of it, and file with `antibody bug --submit` only after they confirm. Never file one on your own initiative.
 
+## The review's proposals
+
+A review's changes to code or instructions (local guards, helper scripts, `~/.claude/CLAUDE.md`) are patches in `reviews/proposals/`. When the person approves one, don't make the edit yourself and don't hand them code: `antibody apply <date> <n> --dry-run` shows the diff, and `antibody apply <date> <n>` applies it, backs the files up and runs `antibody test`. Give them that command for their own terminal; if you run it, antibody asks them first and refuses in auto mode. A guard check that misfires is fixed by porting the guard into data rules (`antibody guard port`), which the review does itself.
+
 ## Updates
 
 At session start antibody may hand you a notice for the person: what's new since an update, a newer release, or an overdue review. Their app may not show it, so mention it in one line at the end of your first reply. Updating is their call: give them the two commands from the message to run in a terminal. Don't run them yourself unless asked.

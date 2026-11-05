@@ -2,6 +2,15 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- **An approved fix to a local guard no longer needs a hand edit.** Guards are code, so the review can't change them, and on 2026-11-05 an approved one-line fix came back as a diff to type in. Now:
+  - **The review ports guards into data rules,** which it can fix itself. `antibody guard port <guard id> <rules.json>` checks candidate rules against their own cases, against each other, and against the guard on every command logged in the last 90 days; a verdict that differs from the guard's must be asked for by a case. `--apply` adds the rules in the guard's state (enforced checks stay enforced) and retires the guard. The review tries a port before proposing a guard edit.
+  - **Data rules can say "or" and "not".** New `match` keys `any` and `not` hold sub-matches on the same stage, so a guard check like `a && (b || c) && !d` is one rule.
+  - **What stays tier 2 is a ready patch.** The review writes each proposal (guard logic that needs code, helper scripts, `~/.claude/CLAUDE.md`) to `reviews/proposals/<date>-<n>.json`, and its summary gives one command per proposal: `antibody apply <date> <n>`. It shows the diff, backs the files up, applies the patch and runs `antibody test`, putting the files back if more rules fail. A new core rule, `core.confirm-apply`, asks you before a Claude session can run it and refuses in auto mode.
+
+By hand: nothing.
+
 ## 0.6.0 (2026-11-05)
 
 - **What's new stays on screen until you say you've read it.** After an update, a release with a "By hand" step shows that step at every session start until you run `antibody whats-new --seen` (or tell Claude you've read it; antibody asks you before Claude can confirm, and refuses in auto mode). A notice shown a few times a day could be used up by sessions nobody watched, so a step you had to take could go unseen. A release with nothing to do by hand shows once. `antibody whats-new` prints the notes since the release you last confirmed (`--all` for every release), and `doctor` notes a step you haven't confirmed.

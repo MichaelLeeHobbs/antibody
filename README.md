@@ -117,12 +117,12 @@ Data rules live in `rules/*.json` in the data folder. The review adds them, and 
 }
 ```
 
-- **`match`** keys (all must hold on one stage of the command): `name`, `command` (regex on the stage with quoted text masked), `raw`, `notRaw`, `hasFlag`, `anyFlag`, `lacksFlag`, `repeatedFlag`, `flagValue`, `next` (the next stage in the pipe), `redirect`, `stage: "first"`, `noInput`. Whole-command keys: `whole`, `notWhole`. For Write/Edit rules: `filePath`.
+- **`match`** keys (all must hold on one stage of the command): `name`, `command` (regex on the stage with quoted text masked), `raw`, `notRaw`, `hasFlag`, `anyFlag`, `lacksFlag`, `repeatedFlag`, `flagValue`, `next` (the next stage in the pipe), `redirect`, `stage: "first"`, `noInput`, and two that hold more `match` objects for the same stage: `any` (one of them must hold) and `not` (none may hold). With those, a guard's `a && (b || c) && !d` is one rule. Whole-command keys: `whole`, `notWhole`. For Write/Edit rules: `filePath`.
 - **Actions:** `deny`, `ask`, `warn`, `rewrite`. An `ask` reaches a person only in the `default`, `acceptEdits` and `plan` permission modes. In `auto` mode Claude Code settles an ask without showing it, and `bypassPermissions` and `dontAsk` never prompt, so in those (and any mode antibody doesn't know) the hook turns `ask` into `deny` and tells the session to hand the person the exact change.
 - **Rewrite operations:** `renameFlag`, `dropFlag`, `insertAfterName`, `replace` (a regex on the stage, with `$1` groups).
 - **Scope:** `scope.os` and `scope.cwd`, for example `{ "cwd": "/web-app(/|$)" }` makes a rule project-only.
 
-A rule that needs real logic is a local guard: an `.mjs` file in `guards/` that exports `{ id, check(ctx) }`. Guards are code, so the review only proposes them and a person adds them.
+A rule that needs real logic is a local guard: an `.mjs` file in `guards/` that exports `{ id, check(ctx) }`. Guards are code, so the review can't change them. Most guard checks are flag and regex checks, though, and those port to data rules the review can tune: `antibody guard port <guard id> <rules.json>` checks the candidate rules against their own cases, against each other, and against the guard on every command logged in the last 90 days. A verdict that differs from the guard's is allowed only where a case asks for it (that's how a port also fixes a guard's false positive). With `--apply` it adds the rules in the state the guard had and retires the guard; its file stays, and `antibody rule promote <guard id>` brings it back.
 
 ## Issues
 
@@ -161,6 +161,8 @@ antibody only fixes Claude's own failures. When something is really a bug in you
 - `note`: what a session found;
 - `issues`, `issue show|add|fix|seen|archive`, `search`;
 - `rules`, `rule add|promote|demote|retire`, `test`;
+- `guard port`: move a local guard's checks into data rules (see "Your own rules");
+- `apply [<date> <n>]`: apply one of the review's proposals (see "The review");
 - `snapshot` and `replay --before`: re-run logged commands through old and new rules and list changed verdicts;
 - `report`;
 - `archive`, `rotate`;
@@ -179,9 +181,18 @@ If antibody gets something wrong (a rule that misfires, a hook error, a confusin
 - issues;
 - data rules, always starting in shadow, with cases, replay-checked;
 - rule states;
-- `learned.md`.
+- `learned.md`;
+- porting a local guard into data rules, when every check ports and replay shows no change it didn't ask for. This is how the review fixes a guard check that misfires, so most guard fixes never need a person.
 
-Anything executable is tier 2 and only proposed: helper scripts, local guards, repo changes. Event text is treated strictly as data. If the data folder is a git repo, each run is one commit, so `git revert` undoes a bad run.
+Anything else executable is tier 2 and only proposed: guard logic that no data rule can express, helper scripts, and changes to `~/.claude/CLAUDE.md`. The review writes each one as a ready patch, `reviews/proposals/<date>-<n>.json`, and its summary gives you one command per proposal to run in your own terminal:
+
+```
+antibody apply 2026-11-05 2
+```
+
+It shows the diff, backs up each file it changes, applies the patch and runs `antibody test`; if more rules fail than before, it puts the files back. `--dry-run` only shows the diff, and `antibody apply` with no arguments lists the proposals and which are applied. A patch only replaces text it finds exactly once, so a file that changed since the review is refused, not patched in the wrong place, and it never touches settings, installed plugins or the event log. If a Claude session runs `apply`, antibody asks you first, and in auto mode it refuses. Changes to a project repository aren't patches: they go to a session or a card in that project.
+
+Event text is treated strictly as data. If the data folder is a git repo, each run is one commit, so `git revert` undoes a bad run.
 
 Run it unattended with `--permission-mode acceptEdits` from the data folder, never `bypassPermissions`.
 
@@ -189,7 +200,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 - antibody fails open: a broken rule or hook lets the call through.
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
-- Changes to settings, the plugin itself, its log and local guards are caught by `core` rules. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
+- Changes to settings, the plugin itself, its log and local guards are caught by `core` rules, and so is a session running `antibody apply`. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
 
 ## Network
