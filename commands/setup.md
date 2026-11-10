@@ -1,5 +1,5 @@
 ---
-description: Set antibody up after installing the plugin. Creates the data folder, checks the install, and shows the settings to add.
+description: Set antibody up after installing the plugin. Creates the data folder, checks the install, and gives you the one command that adds its settings.
 ---
 
 You are walking the person through antibody's first-time setup. Keep it short: run the steps, then give one summary.

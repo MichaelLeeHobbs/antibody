@@ -35,7 +35,7 @@ You need Claude Code and Node 18 or later. Three steps:
    claude plugin install antibody@antibody
    ```
 
-   If adding the marketplace fails while cloning (git trying SSH without your keys), use `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. In the terminal Claude UI, `/plugin install antibody@antibody` works too.
+   `claude plugin list` should now show `antibody@antibody` as enabled. If adding the marketplace fails while cloning (git trying SSH without your keys), use `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. In the terminal Claude UI, `/plugin install antibody@antibody` works too.
 
 2. **Start a new Claude session and run `/antibody:setup`.** The CLI and the desktop app's Code tab both work; they share `~/.claude`. Setup creates the data folder, checks the install, and gives you one command.
 

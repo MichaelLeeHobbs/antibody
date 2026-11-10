@@ -40,9 +40,10 @@ const days = (n) => new Date(Date.now() - n * 864e5);
 const HELP = `antibody: learn from Claude's own tool failures and stop them recurring.
 
   init [--packs a,b] [--owner <name>]   create the data folder and print the settings to add
-  permissions [--apply] [--file <path>] show the permission entries settings.json is missing;
-                                        --apply adds them (backs the file up first). Run it
-                                        yourself: a Claude session is asked before it can apply
+  permissions [--apply] [--file <path>] show the permission entries settings.json is missing, and
+                                        the learned.md line if CLAUDE.md lacks it; --apply adds
+                                        them (backs each file up first). Run it yourself: a
+                                        Claude session is asked before it can apply
   doctor [--online]                     check the install: data folder, packs, rules, the plugin's
                                         files against the release manifest; --online also checks
                                         that manifest against the one published at the release tag
