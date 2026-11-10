@@ -159,22 +159,16 @@ async function main() {
       if (!readState().seenVersion) markSeen(seenVersion());
       const gi = join(p.home, '.gitignore');
       if (!existsSync(gi)) writeFileSync(gi, 'events*.jsonl\nstate/\n');
-      const home = tildeHome();
-      say(`Data folder ready: ${p.home}`);
-      say(`Packs: core${packs.length ? ', ' + packs.join(', ') : ''} (change in config.json)`);
+      // Short on purpose: the result, then the one step that is the person's. `permissions` lists the
+      // entries for anyone who wants to see them or add them by hand.
+      say(`Data folder ready: ${p.home} (packs: ${config().packs.join(', ')})`);
       say('');
-      say('1. This line in ~/.claude/CLAUDE.md lets sessions see the learned rules (permissions --apply in step 2 adds it):');
-      say(`   @${home}/learned.md`);
+      say('One step left. Run this in your own terminal (PowerShell, cmd or bash), not in Claude:');
       say('');
-      say('2. Add these to "permissions" in ~/.claude/settings.json so the review can heal unattended:');
-      say(JSON.stringify(permissionEntries(), null, 2).replace(/^/gm, '   '));
-      say('   To merge them for you, run this in your own terminal, not in a Claude session. It shows what it would');
-      say('   add; add --apply to back the file up and add only the missing entries:');
-      say(`     ${CLI} permissions`);
-      say('   (A Claude session never edits settings.json on its own: that boundary stays a human act.)');
+      say(`  ${CLI} permissions --apply`);
       say('');
-      say(`3. Optional: put the data folder under git, so every review is a commit you can revert: cd "${p.home}" && git init`);
-      say(`4. Schedule the review: ${CLI} schedule`);
+      say('It backs up ~/.claude/settings.json and ~/.claude/CLAUDE.md, then adds antibody\'s permission entries');
+      say('and the line that loads its learned rules. A Claude session never edits its own settings.');
       return;
     }
 

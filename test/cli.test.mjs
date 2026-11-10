@@ -10,9 +10,12 @@ test('init, doctor and test on a fresh install', () => {
   const h = tempHome();
   const init = cli(h.env, 'init', '--packs', 'git-bash-windows,windows-orphans');
   assert.equal(init.code, 0, init.err);
-  assert.match(init.out, /learned\.md/);
-  assert.match(init.out, /"deny"/);
-  assert.match(init.out, /"Bash\(antibody \*\)"/, 'a permission entry that survives plugin updates');
+  assert.match(init.out, /packs: core, git-bash-windows, windows-orphans\)/);
+  assert.match(init.out, /^  node ".*antibody\.mjs" permissions --apply$/m, 'the one command for the person, on its own line');
+  assert.match(init.out, /settings\.json and ~\/\.claude\/CLAUDE\.md/, 'says what that command changes');
+  assert.doesNotMatch(init.out, /"deny"/, 'no JSON block: permissions lists the entries');
+  assert.doesNotMatch(init.out, /&&/, 'nothing that breaks in Windows PowerShell 5.1');
+  assert.ok(init.out.trimEnd().split('\n').length <= 10, `init stays short:\n${init.out}`);
   const doc = cli(h.env, 'doctor');
   assert.equal(doc.code, 0, doc.out + doc.err);
   const t = cli(h.env, 'test');
