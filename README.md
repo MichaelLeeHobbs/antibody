@@ -26,30 +26,24 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ## Install
 
-1. **Add the marketplace and install the plugin.** From a terminal (PowerShell, cmd, bash), not inside a Claude session:
+You need Claude Code and Node 18 or later. Three steps:
+
+1. **Install the plugin** from a terminal (PowerShell, cmd or bash), not inside a Claude session:
 
    ```
    claude plugin marketplace add MichaelLeeHobbs/antibody
    claude plugin install antibody@antibody
    ```
 
-   Adding the marketplace only registers it; the second command is what installs the plugin. Check it with `claude plugin list`, which should show `antibody@antibody` as enabled. Start a new Claude session afterwards so the hooks load. The plugin is installed for your user, so other Claude Code front ends that share `~/.claude`, such as the Desktop app's Code tab, should pick it up too.
+   If adding the marketplace fails while cloning (git trying SSH without your keys), use `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. In the terminal Claude UI, `/plugin install antibody@antibody` works too.
 
-   Inside the terminal Claude Code UI you can use `/plugin marketplace add MichaelLeeHobbs/antibody` and `/plugin install antibody@antibody` instead. Both open the plugin screen, and nothing is installed until you confirm the install there. These slash commands may not work in the Claude Desktop app, so use the terminal commands above there.
+2. **Start a new Claude session and run `/antibody:setup`.** The CLI and the desktop app's Code tab both work; they share `~/.claude`. Setup creates the data folder, checks the install, and gives you one command.
 
-   If adding the marketplace fails while cloning (for example, git tries SSH and can't find your keys), add it by its HTTPS URL instead: `claude plugin marketplace add https://github.com/MichaelLeeHobbs/antibody.git`. Adding a marketplace needs `git` on your PATH.
+3. **Run that command in your own terminal.** It looks like `node "<plugin folder>/bin/antibody.mjs" permissions --apply`. It backs up `~/.claude/settings.json` and `~/.claude/CLAUDE.md`, then adds antibody's permission entries and the line that loads its learned rules. It only adds, never removes or changes your entries. It's yours to run because a Claude session never changes its own settings: if one tries, antibody asks you first, and refuses in auto mode.
 
-2. **Run the setup.** Run `/antibody:setup`. It does steps 3 to 5 for you. To do them by hand instead, read on.
+Then schedule the review daily: in the desktop app, a scheduled task with the prompt `/antibody:review`; otherwise `antibody schedule` prints an OS task. If the review hasn't run for two days, antibody reminds you.
 
-3. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell, so `antibody init` usually just works there. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs init`.
-
-4. **Add the two settings `init` prints.** A Claude session never edits `settings.json` on its own, so this step is yours:
-   - an `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`;
-   - a `permissions` block for `~/.claude/settings.json`. Merge its entries into your existing `allow` and `deny` lists, or let antibody do it: in your own terminal, run the `permissions` command `init` prints (`node "<plugin folder>/bin/antibody.mjs" permissions`). It lists the missing entries; add `--apply` to back the file up and add them. It only adds entries, never removes or changes yours. If a Claude session runs `permissions --apply`, antibody asks you first, and in auto mode it refuses.
-
-5. **Check the install** with `antibody doctor`.
-
-6. **Schedule the review daily.** With the desktop app, a daily scheduled task with the prompt `/antibody:review` is simplest. Otherwise `antibody schedule` prints the command for your OS (it runs the `claude` CLI, which needs its own login). A daily run means a mistake Claude made today has a fix or a rule by tomorrow. If the review hasn't run for two days, antibody reminds you at session start.
+To do it all by hand instead, see [Setting up by hand](#setting-up-by-hand).
 
 ### Updating
 
@@ -85,6 +79,15 @@ claude plugin update antibody@antibody
 Claude Code then updates in the background once a session is under way; that session keeps the old version until `/reload-plugins` or a new session. `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1` turn plugin auto-update off too, unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
 
 Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
+
+### Setting up by hand
+
+`/antibody:setup` runs these for you.
+
+1. **`antibody init`** creates the data folder (`~/.claude/antibody`, or `$ANTIBODY_HOME`) and picks packs for your OS. Claude Code puts the plugin's `bin/` on PATH for its Bash tool, and some versions do the same for PowerShell. If the shell says `antibody` isn't found, or you're in your own terminal, use `node ~/.claude/plugins/cache/antibody/antibody/<version>/bin/antibody.mjs` in its place.
+2. **`antibody permissions`** lists what's missing: the permission entries for `~/.claude/settings.json` and the `@~/.claude/antibody/learned.md` line for `~/.claude/CLAUDE.md`. Add them by hand (merge the entries into your existing `allow` and `deny` lists), or run it again with `--apply`, in your own terminal, to back the files up and add them.
+3. **`antibody doctor`** checks the install.
+4. **Schedule the review daily** (see step 3 above). `antibody schedule` prints the command for your OS; it runs the `claude` CLI, which needs its own login. A daily run means a mistake Claude made today has a fix or a rule by tomorrow.
 
 ## Packs
 
