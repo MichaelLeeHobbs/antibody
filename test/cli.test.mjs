@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -52,6 +52,32 @@ test('permissions: lists missing entries, --apply backs up and adds only those',
   assert.equal(bad.code, 1);
   assert.match(bad.err, /isn't valid JSON/);
   assert.equal(readFileSync(file, 'utf8'), '{ not json');
+  h.done();
+});
+
+test('permissions --apply also adds the learned.md line to CLAUDE.md, once, after a backup', () => {
+  const h = tempHome();
+  cli(h.env, 'init');
+  const dir = h.env.CLAUDE_CONFIG_DIR;
+  const md = join(dir, 'CLAUDE.md');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(md, '# Mine\n\nKeep this.');
+  // The test's data folder sits outside its Claude folder, so the line names it in full.
+  const line = `@${h.env.ANTIBODY_HOME.replace(/\\/g, '/')}/learned.md`;
+  const dry = cli(h.env, 'permissions');
+  assert.ok(dry.out.includes(`CLAUDE.md: ${line}`), dry.out);
+  assert.equal(readFileSync(md, 'utf8'), '# Mine\n\nKeep this.', 'a dry run changes nothing');
+  const app = cli(h.env, 'permissions', '--apply');
+  assert.equal(app.code, 0, app.err);
+  assert.equal(readFileSync(md, 'utf8'), `# Mine\n\nKeep this.\n\n${line}\n`);
+  assert.ok(readdirSync(dir).some((f) => f.startsWith('CLAUDE.md.antibody-backup-')), 'backed up first');
+  const again = cli(h.env, 'permissions', '--apply');
+  assert.match(again.out, /already there/);
+  assert.doesNotMatch(again.out, /CLAUDE\.md/);
+  assert.equal(readFileSync(md, 'utf8').match(/learned\.md/g).length, 1);
+  // An import someone wrote by hand, with a full path, counts too.
+  writeFileSync(md, '@C:/Users/me/.claude/antibody/learned.md\n');
+  assert.doesNotMatch(cli(h.env, 'permissions').out, /CLAUDE\.md:/);
   h.done();
 });
 
