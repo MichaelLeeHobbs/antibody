@@ -40,9 +40,10 @@ const days = (n) => new Date(Date.now() - n * 864e5);
 const HELP = `antibody: learn from Claude's own tool failures and stop them recurring.
 
   init [--packs a,b] [--owner <name>]   create the data folder and print the settings to add
-  permissions [--apply] [--file <path>] show the permission entries settings.json is missing;
-                                        --apply adds them (backs the file up first). Run it
-                                        yourself: a Claude session is asked before it can apply
+  permissions [--apply] [--file <path>] show the permission entries settings.json is missing, and
+                                        the learned.md line if CLAUDE.md lacks it; --apply adds
+                                        them (backs each file up first). Run it yourself: a
+                                        Claude session is asked before it can apply
   doctor [--online]                     check the install: data folder, packs, rules, the plugin's
                                         files against the release manifest; --online also checks
                                         that manifest against the one published at the release tag
@@ -125,6 +126,10 @@ function permissionEntries() {
   };
 }
 
+// The CLAUDE.md line that loads learned.md into every session. Any @-import of antibody's learned.md counts.
+const importLine = () => `@${tildeHome()}/learned.md`;
+const hasImport = (text) => text.split('\n').some((l) => l.trim() === importLine() || /^@\S*[\\/]antibody[\\/]learned\.md$/.test(l.trim()));
+
 // Entries an older init printed that name one plugin version's path; they stop matching after an update.
 const pinned = (e) => /^Bash\(node ".*[\\/]antibody[\\/][^\\/]+[\\/]bin[\\/]antibody\.mjs" \*\)$/.test(e);
 
@@ -154,22 +159,16 @@ async function main() {
       if (!readState().seenVersion) markSeen(seenVersion());
       const gi = join(p.home, '.gitignore');
       if (!existsSync(gi)) writeFileSync(gi, 'events*.jsonl\nstate/\n');
-      const home = tildeHome();
-      say(`Data folder ready: ${p.home}`);
-      say(`Packs: core${packs.length ? ', ' + packs.join(', ') : ''} (change in config.json)`);
+      // Short on purpose: the result, then the one step that is the person's. `permissions` lists the
+      // entries for anyone who wants to see them or add them by hand.
+      say(`Data folder ready: ${p.home} (packs: ${config().packs.join(', ')})`);
       say('');
-      say('1. Add this line to ~/.claude/CLAUDE.md so sessions see the learned rules:');
-      say(`   @${home}/learned.md`);
+      say('One step left. Run this in your own terminal (PowerShell, cmd or bash), not in Claude:');
       say('');
-      say('2. Add these to "permissions" in ~/.claude/settings.json so the review can heal unattended:');
-      say(JSON.stringify(permissionEntries(), null, 2).replace(/^/gm, '   '));
-      say('   To merge them for you, run this in your own terminal, not in a Claude session. It shows what it would');
-      say('   add; add --apply to back the file up and add only the missing entries:');
-      say(`     ${CLI} permissions`);
-      say('   (A Claude session never edits settings.json on its own: that boundary stays a human act.)');
+      say(`  ${CLI} permissions --apply`);
       say('');
-      say(`3. Optional: put the data folder under git, so every review is a commit you can revert: cd "${p.home}" && git init`);
-      say(`4. Schedule the review: ${CLI} schedule`);
+      say('It backs up ~/.claude/settings.json and ~/.claude/CLAUDE.md, then adds antibody\'s permission entries');
+      say('and the line that loads its learned rules. A Claude session never edits its own settings.');
       return;
     }
 
@@ -189,30 +188,46 @@ async function main() {
         add[k] = want[k].filter((e) => !(perms[k] || []).includes(e));
       }
       const stale = [...(perms.allow || []), ...(perms.deny || [])].filter(pinned);
+      // The same human step adds the learned-rules line to CLAUDE.md, so setup has nothing to ask.
+      const md = join(claudeDir(), 'CLAUDE.md');
+      const mdText = existsSync(md) ? readText(md) : '';
+      const needImport = !hasImport(mdText);
       say(`Settings file: ${file}${existsSync(file) ? '' : ' (not there yet; --apply creates it)'}`);
       const n = add.allow.length + add.deny.length;
       if (!n) say('Every antibody permission entry is already there.');
       for (const k of ['allow', 'deny']) for (const e of add[k]) say(`  + ${k.padEnd(5)} ${e}`);
+      if (needImport) say(`  + ${md}: ${importLine()}`);
       if (stale.length) {
         say('These entries name one plugin version\'s path and stop matching after an update. "Bash(antibody *)" covers them; remove them by hand if you like:');
         stale.forEach((e) => say(`  - ${e}`));
       }
-      if (!n) return;
+      if (!n && !needImport) return;
       if (!apply) {
-        say(`Nothing changed. To add ${n === 1 ? 'this entry' : `these ${n} entries`}, run this in your own terminal: ${CLI} permissions --apply`);
+        say(`Nothing changed. To add ${n + needImport === 1 ? 'this' : 'these'}, run this in your own terminal: ${CLI} permissions --apply`);
         return;
       }
-      if (existsSync(file)) {
-        const backup = `${file}.antibody-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-        cpSync(file, backup);
+      const backUp = (f) => {
+        const backup = `${f}.antibody-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+        cpSync(f, backup);
         say(`Backed up to ${backup}`);
-      } else ensureDir(join(file, '..'));
-      settings.permissions = { ...perms };
-      for (const k of ['allow', 'deny']) if (add[k].length) settings.permissions[k] = [...(perms[k] || []), ...add[k]];
-      const tmp = `${file}.antibody-tmp`;
-      writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n');
-      renameSync(tmp, file);
-      say(`Added ${n} ${n === 1 ? 'entry' : 'entries'} to ${file}. Start a new Claude session so they take effect.`);
+      };
+      if (n) {
+        if (existsSync(file)) backUp(file);
+        else ensureDir(join(file, '..'));
+        settings.permissions = { ...perms };
+        for (const k of ['allow', 'deny']) if (add[k].length) settings.permissions[k] = [...(perms[k] || []), ...add[k]];
+        const tmp = `${file}.antibody-tmp`;
+        writeFileSync(tmp, JSON.stringify(settings, null, 2) + '\n');
+        renameSync(tmp, file);
+        say(`Added ${n} ${n === 1 ? 'entry' : 'entries'} to ${file}.`);
+      }
+      if (needImport) {
+        if (existsSync(md)) backUp(md);
+        else ensureDir(join(md, '..'));
+        appendFileSync(md, `${mdText && !mdText.endsWith('\n') ? '\n' : ''}${mdText ? '\n' : ''}${importLine()}\n`);
+        say(`Added ${importLine()} to ${md}.`);
+      }
+      say('Start a new Claude session so the changes take effect.');
       return;
     }
 

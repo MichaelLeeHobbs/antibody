@@ -10,8 +10,13 @@ Claude Code notices an update only when the version changes, so every release bu
   - **Learned rules go in `learned.md`, never CLAUDE.md.** When a CLAUDE.md line is wrong, the review writes the corrected rule in `learned.md` and lists the stale line in its review file.
   - **The summary says what it fixed in plain words.** It asks only what needs your authority (permissions, security, settings, policy, or an edit outside antibody's files), and applies open patches from earlier runs.
 - **Examples are generic.** The README's sample rule and code comments no longer use one person's tools.
+- **Installing takes three steps and one command of yours.** Setup used to show a JSON block, a read-only permissions listing, the whole `antibody schedule` text and a paragraph on updates, then ask whether to edit CLAUDE.md. Now:
+  - **`permissions --apply` also adds the `@~/.claude/antibody/learned.md` line to `~/.claude/CLAUDE.md`** when no line imports antibody's `learned.md` (a full-path import counts). It backs CLAUDE.md up first, as it does settings.json. `antibody permissions` lists the missing line with the missing entries.
+  - **`/antibody:setup` asks nothing.** It runs `init` and `doctor`, gives you the `permissions --apply` command with one sentence on why it's yours, and mentions the daily review in one line. It no longer runs `antibody schedule` or explains updates unless you ask.
+  - **`antibody init` prints 8 lines, not 29:** the data folder and packs, then the `permissions --apply` command on its own line and what it changes. The JSON block is gone (`antibody permissions` lists the entries), and so is the optional `cd "<folder>" && git init` line, which is a syntax error in Windows PowerShell 5.1.
+  - **The README's Install section is the three steps** (install, `/antibody:setup`, the one command). The by-hand steps moved to "Setting up by hand".
 
-By hand: nothing.
+By hand: nothing. If you already added the learned.md line yourself, `permissions --apply` leaves CLAUDE.md alone.
 
 ## 0.7.0 (2026-11-05)
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -10,9 +10,12 @@ test('init, doctor and test on a fresh install', () => {
   const h = tempHome();
   const init = cli(h.env, 'init', '--packs', 'git-bash-windows,windows-orphans');
   assert.equal(init.code, 0, init.err);
-  assert.match(init.out, /learned\.md/);
-  assert.match(init.out, /"deny"/);
-  assert.match(init.out, /"Bash\(antibody \*\)"/, 'a permission entry that survives plugin updates');
+  assert.match(init.out, /packs: core, git-bash-windows, windows-orphans\)/);
+  assert.match(init.out, /^  node ".*antibody\.mjs" permissions --apply$/m, 'the one command for the person, on its own line');
+  assert.match(init.out, /settings\.json and ~\/\.claude\/CLAUDE\.md/, 'says what that command changes');
+  assert.doesNotMatch(init.out, /"deny"/, 'no JSON block: permissions lists the entries');
+  assert.doesNotMatch(init.out, /&&/, 'nothing that breaks in Windows PowerShell 5.1');
+  assert.ok(init.out.trimEnd().split('\n').length <= 10, `init stays short:\n${init.out}`);
   const doc = cli(h.env, 'doctor');
   assert.equal(doc.code, 0, doc.out + doc.err);
   const t = cli(h.env, 'test');
@@ -52,6 +55,32 @@ test('permissions: lists missing entries, --apply backs up and adds only those',
   assert.equal(bad.code, 1);
   assert.match(bad.err, /isn't valid JSON/);
   assert.equal(readFileSync(file, 'utf8'), '{ not json');
+  h.done();
+});
+
+test('permissions --apply also adds the learned.md line to CLAUDE.md, once, after a backup', () => {
+  const h = tempHome();
+  cli(h.env, 'init');
+  const dir = h.env.CLAUDE_CONFIG_DIR;
+  const md = join(dir, 'CLAUDE.md');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(md, '# Mine\n\nKeep this.');
+  // The test's data folder sits outside its Claude folder, so the line names it in full.
+  const line = `@${h.env.ANTIBODY_HOME.replace(/\\/g, '/')}/learned.md`;
+  const dry = cli(h.env, 'permissions');
+  assert.ok(dry.out.includes(`CLAUDE.md: ${line}`), dry.out);
+  assert.equal(readFileSync(md, 'utf8'), '# Mine\n\nKeep this.', 'a dry run changes nothing');
+  const app = cli(h.env, 'permissions', '--apply');
+  assert.equal(app.code, 0, app.err);
+  assert.equal(readFileSync(md, 'utf8'), `# Mine\n\nKeep this.\n\n${line}\n`);
+  assert.ok(readdirSync(dir).some((f) => f.startsWith('CLAUDE.md.antibody-backup-')), 'backed up first');
+  const again = cli(h.env, 'permissions', '--apply');
+  assert.match(again.out, /already there/);
+  assert.doesNotMatch(again.out, /CLAUDE\.md/);
+  assert.equal(readFileSync(md, 'utf8').match(/learned\.md/g).length, 1);
+  // An import someone wrote by hand, with a full path, counts too.
+  writeFileSync(md, '@C:/Users/me/.claude/antibody/learned.md\n');
+  assert.doesNotMatch(cli(h.env, 'permissions').out, /CLAUDE\.md:/);
   h.done();
 });
 
