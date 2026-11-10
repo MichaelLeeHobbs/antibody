@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join, posix } from 'node:path';
 import { PLUGIN_ROOT, claudeDir, config, paths } from '../../lib/config.mjs';
 import { flagValue, hasFlag } from '../../lib/shell.mjs';
+import { filesForPerson } from '../../lib/proposals.mjs';
 
 const norm = (p) => {
   const s = String(p || '').replace(/\\/g, '/').replace(/^\/([a-z])\//i, '$1:/').toLowerCase();
@@ -201,7 +202,7 @@ export default [
     check(ctx) {
       return writesTo(ctx, (p, loose) => (loose ? norm(p).includes(norm(paths().guards)) || norm(p).includes('/antibody/guards/') : under(p, paths().guards) || /\/\.claude\/antibody\/guards(\/|$)/.test(norm(p)))) ? { action: config().protect.localGuards, message: this.message } : null;
     },
-    cases: { fire: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/guards/twg.mjs' }, { tool: 'Write', file_path: join(paths().guards, 'lib', 'shell.mjs') }, { command: 'rm lib/shell.mjs', cwd: paths().guards }], pass: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/rules/twg.json' }] },
+    cases: { fire: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/guards/x.mjs' }, { tool: 'Write', file_path: join(paths().guards, 'lib', 'shell.mjs') }, { command: 'rm lib/shell.mjs', cwd: paths().guards }], pass: [{ tool: 'Write', file_path: '/home/u/.claude/antibody/rules/x.json' }] },
   },
   {
     id: 'core.plugin-disable',
@@ -253,18 +254,23 @@ export default [
     id: 'core.confirm-apply',
     tools: ['Bash', 'PowerShell'],
     action: 'ask',
-    message: "This applies one of the review's tier-2 proposals: a change to code or instructions that a person approves. The person runs it, or says yes here after reading the diff.",
+    message: "This applies a review patch that changes files outside antibody's own (its data folder and ~/.claude/bin), such as ~/.claude/CLAUDE.md, which shape every project. The person runs it, or says yes here after reading the diff.",
     check(ctx) {
-      const applies = ctx.stages.some((st) => {
+      // Patches to antibody's own files are the review's to apply; only the others need a person.
+      const person = [];
+      for (const st of ctx.stages) {
         const i = st.name === 'antibody' ? 0 : st.name === 'node' ? st.argv.findIndex((a) => /antibody(\.mjs)?$/i.test(a)) : -1;
         // With no proposal named it only lists them; --dry-run only shows the diff.
-        return i >= 0 && st.argv[i + 1] === 'apply' && st.argv.length > i + 2 && !st.argv.includes('--dry-run');
-      });
-      return applies ? { action: 'ask', message: this.message } : null;
+        if (i < 0 || st.argv[i + 1] !== 'apply' || st.argv.length <= i + 2 || st.argv.includes('--dry-run')) continue;
+        const [date, n] = st.argv.slice(i + 2);
+        person.push(...(/^\d{4}-\d{2}-\d{2}$/.test(date || '') && /^\d+$/.test(n || '') ? filesForPerson(date, n) : [`${date} ${n}`]));
+      }
+      return person.length ? { action: 'ask', message: `${this.message} It changes: ${[...new Set(person)].join(', ')}.` } : null;
     },
+    // No proposal files exist where cases run, so these count as unreadable and ask.
     cases: {
       fire: ['antibody apply 2026-11-05 2', 'node "C:/u/.claude/plugins/cache/antibody/antibody/0.7.0/bin/antibody.mjs" apply 2026-11-05 2', { tool: 'PowerShell', command: 'antibody apply 2026-11-05 2' }],
-      pass: ['antibody apply', 'antibody apply 2026-11-05 2 --dry-run', 'antibody guard port legacy.twg r.json'],
+      pass: ['antibody apply', 'antibody apply 2026-11-05 2 --dry-run', 'antibody guard port local.x r.json'],
     },
   },
   {

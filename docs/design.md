@@ -12,7 +12,9 @@ So:
 
 - **Capture is automatic.** A session's only optional duty is a one-line `note`.
 - **Recall at the moment of failure.** The failure hook matches the event against issue matchers and returns the fix as context.
-- **Rules are data.** The healer adds and tunes JSON rules. It never writes code; code (packs and local guards) is human-reviewed. To keep that from stalling fixes, the healer ports a guard's checks into data rules when they fit (`guard port`, checked against the guard on every logged command), and writes what stays code as a patch the person applies with one command (`apply`), never as a diff to type in.
+- **Rules are data where they can be.** The healer adds and tunes JSON rules, and ports a guard's checks into data rules when they fit (`guard port`, checked against the guard on every logged command).
+- **Healing needs no person.** The person often doesn't use the tools Claude fails with, so a fix waiting on their approval is a fix that never lands. When a fix needs code in antibody's own files (a local guard, an agent helper in `~/.claude/bin`), the healer writes a patch and applies it itself with `apply`, which backs the files up, runs `antibody test` and the patch's own checks, and puts everything back if they get worse. That keeps the risk of unattended code (it learns from untrusted event text) bounded by evidence instead of by a person who lacks context. Changes outside antibody's files (`~/.claude/CLAUDE.md`, settings, permissions) still go to a person.
+- **Local knowledge stays local.** Tool traps for one person's tools and hosts live in their data folder (`learned.md`, local rules, guards). The plugin ships only generic rules.
 - **Evidence gates every rule.** New rules start in shadow. Promotion needs hits across sessions with none disputed, every case passing, and a clean replay against logged traffic.
 - **Status is computed** from recurrence after the fix.
 - **"What worked next" is data.** After a failure, the next similar successful call in the session is logged as a recovery: the fix, written by the model that hit the problem.
@@ -38,7 +40,7 @@ A long run can do the work and still look stuck: the person checks the task list
 | Who | Can change |
 |---|---|
 | Any session | nothing in antibody's state except `note` (and issue files) |
-| The review (unattended) | issues, data rules and their states, `learned.md`, its review file |
-| A person | packs (by release), local guards, settings, permissions |
+| The review (unattended) | issues, data rules and their states, `learned.md`, its review file, and through `apply` (tested, rolled back on failure) local guards and helpers in `~/.claude/bin` |
+| A person | packs (by release), settings, permissions, `~/.claude/CLAUDE.md` |
 
 `core` rules enforce the bottom row against shell writes too, since permission deny rules cover only the file tools.

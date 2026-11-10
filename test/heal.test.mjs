@@ -229,12 +229,45 @@ test('apply: refuses stale patches and protected targets, and puts files back wh
   h.done();
 });
 
-test('apply asks a person before a session runs it, and refuses in auto mode', () => {
+test('apply: a helper script patch needs checks, and a failed check puts the file back', () => {
+  const { h, home } = setup();
+  const bin = join(h.env.CLAUDE_CONFIG_DIR, 'bin');
+  mkdirSync(bin, { recursive: true });
+  const helper = join(bin, 'shape.mjs');
+  writeFileSync(helper, "console.log(JSON.stringify({ data: { issues: [] } }));\n");
+  const edit = { file: '~/.claude/bin/shape.mjs', find: '{ data: { issues: [] } }', replace: '{ issues: [] }' };
+  proposal(home, 1, { title: 'no checks', edits: [edit] });
+  const none = cli(h.env, 'apply', '2026-11-05', '1');
+  assert.equal(none.code, 1);
+  assert.match(none.err, /needs "checks" that run the script/);
+  proposal(home, 2, { title: 'wrong check', edits: [edit], checks: [{ run: ['~/.claude/bin/shape.mjs'], expect: '"data"' }] });
+  const bad = cli(h.env, 'apply', '2026-11-05', '2');
+  assert.equal(bad.code, 1);
+  assert.match(bad.out + bad.err, /doesn't match[\s\S]*check\(s\) failed, so the files are back/);
+  assert.match(readFileSync(helper, 'utf8'), /data:/);
+  proposal(home, 3, { title: 'right check', edits: [edit], checks: [{ run: ['~/.claude/bin/shape.mjs'], expect: '^\\{"issues":\\[\\]\\}' }] });
+  const ok = cli(h.env, 'apply', '2026-11-05', '3');
+  assert.equal(ok.code, 0, ok.out + ok.err);
+  assert.match(ok.out, /1 check\(s\) passed/);
+  assert.doesNotMatch(readFileSync(helper, 'utf8'), /data:/);
+  h.done();
+});
+
+test('apply runs patches to antibody\'s own files unattended, and asks a person for anything else', () => {
   const h = tempHome();
   cli(h.env, 'init');
+  const home = h.env.ANTIBODY_HOME;
   const pre = (command, mode) => hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command }, { permission_mode: mode }) });
-  assert.equal(pre('antibody apply 2026-11-05 2', 'default').permissionDecision, 'ask');
+  proposal(home, 1, { title: 'own', edits: [{ file: 'learned.md', find: 'a', replace: 'b' }, { file: 'guards/x.mjs', find: 'a', replace: 'b' }, { file: '~/.claude/bin/helper.mjs', find: 'a', replace: 'b' }] });
+  proposal(home, 2, { title: 'global', edits: [{ file: 'learned.md', find: 'a', replace: 'b' }, { file: '~/.claude/CLAUDE.md', find: 'a', replace: 'b' }] });
+  proposal(home, 3, { title: 'sneaky', edits: [{ file: '~/.claude/bin/../CLAUDE.md', find: 'a', replace: 'b' }] });
+  assert.equal(pre('antibody apply 2026-11-05 1', 'auto'), null, 'antibody\'s own files');
+  const global = pre('antibody apply 2026-11-05 2', 'default');
+  assert.equal(global.permissionDecision, 'ask');
+  assert.match(global.permissionDecisionReason, /It changes: ~\/\.claude\/CLAUDE\.md\./);
   assert.equal(pre('antibody apply 2026-11-05 2', 'auto').permissionDecision, 'deny');
+  assert.equal(pre('antibody apply 2026-11-05 3', 'auto').permissionDecision, 'deny', 'a path that climbs out of bin/');
+  assert.equal(pre('antibody apply 2026-11-05 9', 'default').permissionDecision, 'ask', 'a proposal that isn\'t there');
   assert.equal(pre('antibody apply 2026-11-05 2 --dry-run', 'auto'), null);
   assert.equal(pre('antibody apply', 'auto'), null);
   assert.equal(pre('antibody guard port legacy.twg r.json --apply', 'auto'), null, 'porting to data rules is the review\'s own work');

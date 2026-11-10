@@ -10,7 +10,7 @@ import { createIssue, listIssues, readIssue, sightings, status, writeIssue, find
 import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../lib/rules.mjs';
 import { MANIFEST, readManifest, sameFiles, verifyFiles } from '../lib/manifest.mjs';
 import { portGuard } from '../lib/port.mjs';
-import { diff, listProposals, loadProposal } from '../lib/proposals.mjs';
+import { diff, filesForPerson, listProposals, loadProposal, runChecks } from '../lib/proposals.mjs';
 import { CHANGELOG, REPO, UPDATE, changes, checkEnabled, compareVersions, installedVersion, markSeen, readState, refresh, seenVersion } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
@@ -74,10 +74,11 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
                                         cases, each other's, and every command logged in the last N
                                         days (default 90); --apply adds them in the guard's state and
                                         retires the guard
-  apply [<review date> <n>] [--dry-run] apply a review's tier-2 proposal: shows the diff, backs the
-                                        files up, applies it and runs test, putting the files back if
-                                        test gets worse. With no arguments, lists the proposals. Run
-                                        it yourself: a Claude session is asked before it can apply
+  apply [<review date> <n>] [--dry-run] apply a review's patch: shows the diff, backs the files up,
+                                        applies it, runs test and the patch's checks, and puts the
+                                        files back if either gets worse. With no arguments, lists the
+                                        patches. A patch to anything outside the data folder and
+                                        ~/.claude/bin (CLAUDE.md, for one) asks a person first
   test                                  run every rule's own cases (exit 1 on any failure)
   snapshot                              copy local rules and guards aside, for replay --before
   replay [--before <snapshot>] [--days N]  re-run logged commands through the rules
@@ -500,7 +501,7 @@ async function main() {
       if (!date) {
         const list = listProposals();
         for (const p of list) say(`${(p.applied ? `applied ${p.applied.slice(0, 10)}` : 'open').padEnd(18)}  ${p.date} ${p.n}  ${p.title}`);
-        say(list.length ? `To apply one, run this in your own terminal: ${CLI} apply <date> <n>` : 'No proposals.');
+        say(list.length ? `To apply one: ${CLI} apply <date> <n>` : 'No proposals.');
         return;
       }
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d+$/.test(n || '')) fail('Usage: apply <review date> <n>, for example: apply 2026-11-05 2');
@@ -513,7 +514,11 @@ async function main() {
       say(diff(plan));
       say('');
       if (!files.length) { say('Already applied; nothing to change.'); return; }
-      if (dry) { say(`Dry run: nothing changed. To apply it, run this in your own terminal: ${CLI} apply ${date} ${n}`); return; }
+      if (dry) {
+        const person = filesForPerson(date, n);
+        say(`Dry run: nothing changed. To apply it: ${CLI} apply ${date} ${n}${person.length ? ` (it changes ${person.join(', ')}, so a person runs it or approves it)` : ''}`);
+        return;
+      }
       const testRun = () => {
         const r = spawnSync(process.execPath, [join(PLUGIN_ROOT, 'bin', 'antibody.mjs'), 'test'], { encoding: 'utf8' });
         const m = (r.stdout || '').match(/(\d+) rules, (\d+) failing/);
@@ -534,11 +539,19 @@ async function main() {
         done.push(f);
       }
       const after = testRun();
+      const undo = () => { for (const f of done) f.backup ? cpSync(f.backup, f.full) : rmSync(f.full, { force: true }); };
       if (after.failing > before.failing) {
-        for (const f of done) f.backup ? cpSync(f.backup, f.full) : rmSync(f.full, { force: true });
+        undo();
         say(after.out.split('\n').filter((l) => l.startsWith('FAIL') || l.startsWith('    ')).join('\n'));
         fail(`antibody test got worse (${before.summary} before, ${after.summary} after), so the files are back as they were. Nothing changed; tell the next review.`);
       }
+      const failed = runChecks(proposal, spawnSync);
+      if (failed.length) {
+        undo();
+        say(failed.map((x) => `FAIL  ${x}`).join('\n'));
+        fail(`${failed.length} check(s) failed, so the files are back as they were. Nothing changed.`);
+      }
+      if (proposal.checks?.length) say(`${proposal.checks.length} check(s) passed.`);
       const p = JSON.parse(readText(file));
       p.applied = new Date().toISOString();
       writeFileSync(file, JSON.stringify(p, null, 2) + '\n');

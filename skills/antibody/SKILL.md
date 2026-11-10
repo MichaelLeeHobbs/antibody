@@ -37,7 +37,7 @@ If the person asks to report a problem with antibody (not with their own work), 
 
 ## The review's proposals
 
-A review's changes to code or instructions (local guards, helper scripts, `~/.claude/CLAUDE.md`) are patches in `reviews/proposals/`. When the person approves one, don't make the edit yourself and don't hand them code: `antibody apply <date> <n> --dry-run` shows the diff, and `antibody apply <date> <n>` applies it, backs the files up and runs `antibody test`. Give them that command for their own terminal; if you run it, antibody asks them first and refuses in auto mode. A guard check that misfires is fixed by porting the guard into data rules (`antibody guard port`), which the review does itself.
+The review fixes things itself, code included: it patches local guards and the helper scripts in `~/.claude/bin` with `antibody apply <date> <n>`, which backs the files up, runs `antibody test` and the patch's checks, and undoes the patch if they get worse. Patches live in `reviews/proposals/`. A patch that touches anything else (such as `~/.claude/CLAUDE.md`) needs the person: if you run it, antibody asks them first and refuses in auto mode. Don't edit guards or helpers by hand from a working session; note what you found and the review will fix it.
 
 ## Updates
 
