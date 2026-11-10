@@ -29,7 +29,7 @@ export default [
   },
   {
     ...heredocRule('gbw.heredoc-writes-file', 'A heredoc that writes a file (`cat > file <<EOF`, `cat >> file`, `tee`).', (h) => !/\/dev\/null/.test(opener(h)) && (/\b(cat|tee)\b[^|;&]*>/.test(opener(h)) || /\btee\b/.test(opener(h)))),
-    cases: { fire: ["twg x > /dev/null 2>&1; cat >> notes.md <<'EOF'\nplain\nEOF", "cat > x.mjs <<'EOF'\nconsole.log(`hi ${name}`);\nEOF", "cat >> notes.md <<'EOF'\nplain text\nEOF", 'tee out.txt <<EOF\nhello\nEOF'], pass: ["sort <<'X'\nb\na\nX", "cat <<< 'here string'"] },
+    cases: { fire: ["mytool x > /dev/null 2>&1; cat >> notes.md <<'EOF'\nplain\nEOF", "cat > x.mjs <<'EOF'\nconsole.log(`hi ${name}`);\nEOF", "cat >> notes.md <<'EOF'\nplain text\nEOF", 'tee out.txt <<EOF\nhello\nEOF'], pass: ["sort <<'X'\nb\na\nX", "cat <<< 'here string'"] },
   },
   {
     ...heredocRule('gbw.heredoc-risky-body', 'A heredoc whose body contains a backtick, a backslash or `${`.', (h) => RISKY.test(h.body)),

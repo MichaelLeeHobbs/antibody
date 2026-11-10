@@ -102,17 +102,17 @@ Data rules live in `rules/*.json` in the data folder. The review adds them, and 
 
 ```json
 {
-  "id": "twg.get-positional",
+  "id": "mycli.show-positional",
   "tools": ["Bash", "PowerShell"],
-  "match": { "name": "twg", "command": "\\bworkitem\\s+get\\b", "hasFlag": "--id" },
+  "match": { "name": "mycli", "command": "\\btask\\s+show\\b", "hasFlag": "--id" },
   "action": "rewrite",
   "rewrite": { "dropFlag": "--id", "keepValue": true },
-  "message": "`twg jira workitem get` takes keys positionally.",
+  "message": "`mycli task show` takes ids positionally.",
   "state": "shadow",
   "issue": "AB-0004",
   "cases": {
-    "fire": [{ "command": "twg jira workitem get --id MED-1", "to": "twg jira workitem get MED-1" }],
-    "pass": ["twg jira workitem get MED-1 MED-2"]
+    "fire": [{ "command": "mycli task show --id T-1", "to": "mycli task show T-1" }],
+    "pass": ["mycli task show T-1 T-2"]
   }
 }
 ```
@@ -122,7 +122,7 @@ Data rules live in `rules/*.json` in the data folder. The review adds them, and 
 - **Rewrite operations:** `renameFlag`, `dropFlag`, `insertAfterName`, `replace` (a regex on the stage, with `$1` groups).
 - **Scope:** `scope.os` and `scope.cwd`, for example `{ "cwd": "/web-app(/|$)" }` makes a rule project-only.
 
-A rule that needs real logic is a local guard: an `.mjs` file in `guards/` that exports `{ id, check(ctx) }`. Guards are code, so the review can't change them. Most guard checks are flag and regex checks, though, and those port to data rules the review can tune: `antibody guard port <guard id> <rules.json>` checks the candidate rules against their own cases, against each other, and against the guard on every command logged in the last 90 days. A verdict that differs from the guard's is allowed only where a case asks for it (that's how a port also fixes a guard's false positive). With `--apply` it adds the rules in the state the guard had and retires the guard; its file stays, and `antibody rule promote <guard id>` brings it back.
+A rule that needs real logic is a local guard: an `.mjs` file in `guards/` that exports `{ id, check(ctx) }`. The review patches guards itself when it must (see "The review"), but most guard checks are flag and regex checks, and those port to data rules that are easier to test and tune: `antibody guard port <guard id> <rules.json>` checks the candidate rules against their own cases, against each other, and against the guard on every command logged in the last 90 days. A verdict that differs from the guard's is allowed only where a case asks for it (that's how a port also fixes a guard's false positive). With `--apply` it adds the rules in the state the guard had and retires the guard; its file stays, and `antibody rule promote <guard id>` brings it back.
 
 ## Issues
 
@@ -176,21 +176,18 @@ If antibody gets something wrong (a rule that misfires, a hook error, a confusin
 
 ## The review
 
-`/antibody:review` (see [commands/review.md](commands/review.md)) runs the healing pass. It can do these itself (tier 1):
+`/antibody:review` (see [commands/review.md](commands/review.md)) runs the healing pass. Fixing is its job, not yours: it makes each fix, verifies it and tells you in plain words what it did. It does all of these itself:
 
 - issues;
 - data rules, always starting in shadow, with cases, replay-checked;
 - rule states;
-- `learned.md`;
-- porting a local guard into data rules, when every check ports and replay shows no change it didn't ask for. This is how the review fixes a guard check that misfires, so most guard fixes never need a person.
+- `learned.md`, where learned rules go (never `~/.claude/CLAUDE.md`), kept under 3 KB;
+- porting a local guard into data rules, when every check ports and replay shows no change it didn't ask for;
+- code patches to antibody's own files: guard logic no data rule can express, and helper scripts in `~/.claude/bin` that agents call.
 
-Anything else executable is tier 2 and only proposed: guard logic that no data rule can express, helper scripts, and changes to `~/.claude/CLAUDE.md`. The review writes each one as a ready patch, `reviews/proposals/<date>-<n>.json`, and its summary gives you one command per proposal to run in your own terminal:
+A code patch is a file, `reviews/proposals/<date>-<n>.json`, that the review applies with `antibody apply <date> <n>`. It backs up each file it changes, applies the patch, runs `antibody test` and the patch's own checks (a helper patch must carry one that runs the script and checks its output), and puts the files back if either gets worse. A patch only replaces text it finds exactly once, so a file that changed since the review is refused, not patched in the wrong place. `--dry-run` only shows the diff, and `antibody apply` with no arguments lists the patches and which are applied.
 
-```
-antibody apply 2026-11-05 2
-```
-
-It shows the diff, backs up each file it changes, applies the patch and runs `antibody test`; if more rules fail than before, it puts the files back. `--dry-run` only shows the diff, and `antibody apply` with no arguments lists the proposals and which are applied. A patch only replaces text it finds exactly once, so a file that changed since the review is refused, not patched in the wrong place, and it never touches settings, installed plugins or the event log. If a Claude session runs `apply`, antibody asks you first, and in auto mode it refuses. Changes to a project repository aren't patches: they go to a session or a card in that project.
+The review asks you only what needs your authority: a permission, security or settings change, a policy decision, or an edit outside antibody's files. A patch to anything else under `~/.claude` (CLAUDE.md, for one) asks you before it runs and refuses in auto mode, and settings, installed plugins and the event log are never patched. Changes to a project repository aren't patches: they go to a session or a card in that project.
 
 Event text is treated strictly as data. If the data folder is a git repo, each run is one commit, so `git revert` undoes a bad run.
 
@@ -200,7 +197,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 - antibody fails open: a broken rule or hook lets the call through.
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
-- Changes to settings, the plugin itself, its log and local guards are caught by `core` rules, and so is a session running `antibody apply`. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
+- Changes to settings, the plugin itself, its log and local guards are caught by `core` rules, and so is a session running `antibody apply` on a patch that reaches outside antibody's own files. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
 
 ## Network

@@ -2,6 +2,17 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- **The review fixes things itself and no longer hands you commands.** Its proposals asked you to decide on fixes for tools you may never use ("make twg-json print query results in one shape"). Now:
+  - **It applies code patches to antibody's own files:** local guards and the agent helper scripts in `~/.claude/bin`. `antibody apply` backs the files up, runs `antibody test` and the patch's own checks, and puts everything back if either gets worse. A patch to a helper script must carry a check that runs it and matches its output (`"checks": [{ "run": [...], "expect": "regex" }]`), or `apply` refuses it.
+  - **`core.confirm-apply` asks only for patches that reach outside antibody's files,** such as `~/.claude/CLAUDE.md`, and names those files. Patches to the data folder and `~/.claude/bin` run unattended.
+  - **Learned rules go in `learned.md`, never CLAUDE.md.** When a CLAUDE.md line is wrong, the review writes the corrected rule in `learned.md` and lists the stale line in its review file.
+  - **The summary says what it fixed in plain words.** It asks only what needs your authority (permissions, security, settings, policy, or an edit outside antibody's files), and applies open patches from earlier runs.
+- **Examples are generic.** The README's sample rule and code comments no longer use one person's tools.
+
+By hand: nothing.
+
 ## 0.7.0 (2026-11-05)
 
 - **An approved fix to a local guard no longer needs a hand edit.** Guards are code, so the review can't change them, and on 2026-11-05 an approved one-line fix came back as a diff to type in. Now:
