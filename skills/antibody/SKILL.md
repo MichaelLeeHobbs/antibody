@@ -41,8 +41,8 @@ The review fixes things itself, code included: it patches local guards and the h
 
 ## Updates
 
-At session start antibody may hand you a notice for the person: what's new since an update, a newer release, or an overdue review. Their app may not show it, so mention it in one line at the end of your first reply. Updating is their call: give them the two commands from the message to run in a terminal. Don't run them yourself unless asked.
+At session start antibody may hand you a notice for the person: what's new since an update, a newer release, or an overdue review. Their app may not show it, so mention it in one line at the end of your first reply. Updating is their call: give them the two `claude plugin ...` commands from the notice, one per line, to run in their own terminal, and say a new session (or `/reload-plugins`) loads the new version. Don't run them yourself unless asked.
 
-A what's-new notice with a "By hand" step repeats in every session until the person confirms it. Pass the step on, and run `antibody whats-new --seen` only when they say they've read it (antibody asks them to approve it). Never confirm it for them.
+A what's-new notice with a "By hand" step repeats in every session until the person confirms it. Pass the step on, and run `antibody whats-new --seen` only when they say the step is done (antibody asks them to approve it). Never confirm it for them. In their own terminal the bare `antibody` isn't on PATH, so any antibody command you give them to run there is the full `node ".../bin/antibody.mjs"` form the notice prints.
 
 The full command list is `antibody help`. `antibody` is on PATH in your shell tools; if the shell says it isn't found, use the full `node ".../bin/antibody.mjs"` form that antibody's own messages print.

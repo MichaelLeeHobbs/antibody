@@ -15,6 +15,11 @@ Claude Code notices an update only when the version changes, so every release bu
   - **`/antibody:setup` asks nothing.** It runs `init` and `doctor`, gives you the `permissions --apply` command with one sentence on why it's yours, and mentions the daily review in one line. It no longer runs `antibody schedule` or explains updates unless you ask.
   - **`antibody init` prints 8 lines, not 29:** the data folder and packs, then the `permissions --apply` command on its own line and what it changes. The JSON block is gone (`antibody permissions` lists the entries), and so is the optional `cd "<folder>" && git init` line, which is a syntax error in Windows PowerShell 5.1.
   - **The README's Install section is the three steps** (install, `/antibody:setup`, the one command). The by-hand steps moved to "Setting up by hand".
+- **Every update command antibody prints works where it tells you to run it.** The update notice strung both commands into one sentence ("run in a terminal: A, then B"), and the By-hand notice, `doctor` and `whats-new` told you to run `antibody whats-new --seen` in a terminal, where the bare `antibody` isn't on PATH. Now:
+  - **The update notice, `update-check` and `doctor` print the two `claude plugin` commands one per line,** each pasteable as-is into PowerShell 5.1, cmd or bash, and say to start a new Claude session afterwards so the new version loads.
+  - **The By-hand notice leads with the step** ("antibody is now 0.7.0 and has a step for you: ...") and then says how to confirm it: tell Claude, or run the printed `node "<plugin folder>/bin/antibody.mjs" whats-new --seen`. An `antibody <command>` inside a changelog's By-hand line is printed in that full form too. `whats-new` and `doctor` give the same full-path commands.
+  - **Claude's instruction under the notice is one line.**
+  - **The README's Updating section is the two commands and the restart,** then one paragraph on By-hand steps. How the check works is in a collapsed block, and auto-update is its own optional section with a recommendation to leave it off.
 
 By hand: nothing. If you already added the learned.md line yourself, `permissions --apply` leaves CLAUDE.md alone.
 

@@ -264,7 +264,7 @@ function sessionStart() {
   // The CLI shows systemMessage, but the desktop app doesn't, so Claude gets the text too and passes it on.
   if (text) out({
     systemMessage: text,
-    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `antibody notice for the person (their app may not show it on screen): ${text}\nMention it to them in one line at the end of your first reply. Don't run the update or the review yourself unless they ask. Run \`antibody whats-new --seen\` only after the person says they've read the what's-new notice; it then stops showing in every session.` },
+    hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: `antibody notice for the person (their app may not show it on screen): ${text}\nPass it on in one line at the end of your first reply. Run the update, the review or \`antibody whats-new --seen\` only when the person asks; --seen only after they say the step is done.` },
   });
 }
 

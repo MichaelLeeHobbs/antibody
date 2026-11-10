@@ -11,7 +11,7 @@ import { compile, evaluate, loadRules, makeContext, testRule, STATES } from '../
 import { MANIFEST, readManifest, sameFiles, verifyFiles } from '../lib/manifest.mjs';
 import { portGuard } from '../lib/port.mjs';
 import { diff, filesForPerson, listProposals, loadProposal, runChecks } from '../lib/proposals.mjs';
-import { CHANGELOG, REPO, UPDATE, changes, checkEnabled, compareVersions, installedVersion, markSeen, readState, refresh, seenVersion } from '../lib/update.mjs';
+import { CHANGELOG, CONFIRM, REPO, UPDATE, UPDATE_COMMANDS, changes, checkEnabled, compareVersions, installedVersion, markSeen, readState, refresh, seenVersion } from '../lib/update.mjs';
 
 const CLI = `node "${join(PLUGIN_ROOT, 'bin', 'antibody.mjs').replace(/\\/g, '/')}"`;
 const args = process.argv.slice(2);
@@ -263,10 +263,10 @@ async function main() {
       const have = installedVersion();
       const u = readState();
       if (!checkEnabled()) say(`note  antibody ${have}; the daily update check is off`);
-      else if (u.latest && compareVersions(u.latest, have) > 0) say(`note  antibody ${u.latest} is out (you have ${have}); to update: ${UPDATE}`);
+      else if (u.latest && compareVersions(u.latest, have) > 0) say(`note  antibody ${u.latest} is out (you have ${have}); to update, run these in your own terminal, then start a new session:\n${UPDATE_COMMANDS.map((c) => `        ${c}`).join('\n')}`);
       else ok(`antibody ${have}${u.checkedAt ? `, latest as of ${u.checkedAt.slice(0, 10)}${u.error ? ` (last check failed: ${u.error})` : ''}` : ''}`);
       const todo = changes(seenVersion(), have).filter((c) => c.byHand);
-      if (todo.length) say(`note  ${todo.map((c) => c.version).join(', ')} need(s) a step by hand you haven't confirmed: antibody whats-new`);
+      if (todo.length) say(`note  a step by hand from ${todo.map((c) => c.version).join(', ')} isn't confirmed yet; to see it: ${CLI} whats-new`);
       const local = readManifest(PLUGIN_ROOT);
       const v = verifyFiles(PLUGIN_ROOT, local);
       if (!v) say(`note  no release file manifest (${MANIFEST}), so the plugin's files can't be checked; normal in a development copy`);
@@ -292,7 +292,7 @@ async function main() {
       const s = await refresh();
       if (quiet) return;
       if (s.error) fail(`Couldn't check for updates: ${s.error}`);
-      if (compareVersions(s.latest, have) > 0) say(`antibody ${s.latest} is out (you have ${have}).\nTo update, run in a terminal: ${UPDATE}\nWhat changed: ${CHANGELOG}`);
+      if (compareVersions(s.latest, have) > 0) say(`antibody ${s.latest} is out (you have ${have}). ${UPDATE}\nWhat changed: ${CHANGELOG}`);
       else say(`antibody ${have} is the latest.`);
       return;
     }
@@ -308,7 +308,7 @@ async function main() {
       const list = changes(since, have);
       if (!list.length) { say(`Nothing new since ${since}. antibody whats-new --all shows every release.`); return; }
       say(list.map((c) => c.text).join('\n\n'));
-      if (list.some((c) => c.byHand) && compareVersions(have, seenVersion()) > 0) say(`\nOnce you've done the "By hand" steps above, run: antibody whats-new --seen`);
+      if (list.some((c) => c.byHand) && compareVersions(have, seenVersion()) > 0) say(`\nThe "By hand" steps above are yours. ${CONFIRM}`);
       return;
     }
 
