@@ -26,7 +26,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 
 ## Install
 
-You need Claude Code and Node 18 or later. Three steps:
+You need Claude Code and Node 18 or later (CI runs the suite on Linux, macOS and Windows). Three steps:
 
 1. **Install the plugin** from a terminal (PowerShell, cmd or bash), not inside a Claude session:
 
@@ -47,25 +47,28 @@ To do it all by hand instead, see [Setting up by hand](#setting-up-by-hand).
 
 ### Updating
 
-Releases are tagged on GitHub (`v0.3.0`) and listed in [CHANGELOG.md](CHANGELOG.md). Claude Code only sees an update when the version number changes, so every release bumps it.
-
-Claude Code doesn't auto-update plugins from marketplaces outside Anthropic's own, and it doesn't light up the Update button for them either. So antibody checks for you: once a day, at session start, it looks up the latest version on GitHub, and if there's a newer one it tells you at the start of your next sessions (up to 3 a day), with the commands to run. The CLI shows it on screen; in the desktop app, which doesn't, Claude mentions it in one line at the end of its first reply. It never installs anything itself. `antibody update-check` checks right away, and `antibody doctor` shows the result. (Turn the check off in [Network](#network).)
-
-To update, first refresh the marketplace. This only refreshes the list of plugins; it doesn't touch the installed copy:
+When a new release is out, antibody says so at session start (the CLI shows it on screen; in the desktop app, Claude mentions it at the end of its first reply). To update, run these in your own terminal:
 
 ```
 claude plugin marketplace update antibody
-```
-
-Then update the plugin itself:
-
-```
 claude plugin update antibody@antibody
 ```
 
-(or, in the terminal UI, `/plugin` → Installed → antibody → Update now), and run `/reload-plugins` or start a new session so the new hooks load. Your data folder, settings lines and `Bash(antibody *)` permission carry over unchanged (an older `Bash(node ".../<version>/bin/antibody.mjs" *)` entry stops matching after an update; `antibody permissions` points it out); anything a release needs you to do by hand is listed in the changelog. After an update, that "By hand" step shows at every session start until you run `antibody whats-new --seen` (or tell Claude you've read it, and approve when antibody asks), so it can't be used up by sessions you never look at. `antibody whats-new` prints the notes since the release you last confirmed.
+Then start a new Claude session (or run `/reload-plugins`) so the new version loads. Your data folder, settings and learned rules carry over.
 
-**Want updates without asking?** You can let Claude Code install new releases by itself. That means new antibody code, which runs on every tool call, arrives without you reading it first, so it's your call. To do it, add `"autoUpdate": true` to the antibody entry under `extraKnownMarketplaces` in `~/.claude/settings.json` (create the entry if it isn't there), or use `/plugin` → Marketplaces → antibody → Enable auto-update in the terminal UI:
+If a release needs something from you, the next session start says what, and keeps saying it until you confirm. Once it's done, tell Claude (antibody asks you to approve that), or run the `whats-new --seen` command the notice prints. Every release is listed in [CHANGELOG.md](CHANGELOG.md); "By hand" there is that step.
+
+<details>
+<summary>How the update check works</summary>
+
+Claude Code doesn't update plugins from marketplaces outside Anthropic's own, or light up the Update button for them, so antibody looks for a newer release itself: once a day, in its own process, a GET of `plugin.json` from GitHub. It tells you in up to 3 new sessions a day and never installs anything. From Claude, `antibody update-check` checks now and `antibody doctor` shows the result. Turn the check off in [Network](#network).
+
+An old `Bash(node ".../<version>/bin/antibody.mjs" *)` permission entry from before 0.3.0 stops matching after an update; `Bash(antibody *)` replaces it, and `antibody permissions` lists any that are left so you can delete them.
+</details>
+
+#### Updates without asking (optional)
+
+Claude Code can install new antibody releases by itself. We recommend leaving this off: antibody's code runs on every tool call, and with auto-update a new release runs before you've read what changed. If you want it anyway, use `/plugin` → Marketplaces → antibody → Enable auto-update in the terminal UI, or add `"autoUpdate": true` to the antibody entry under `extraKnownMarketplaces` in `~/.claude/settings.json`:
 
 ```json
 "extraKnownMarketplaces": {
@@ -76,9 +79,7 @@ claude plugin update antibody@antibody
 }
 ```
 
-Claude Code then updates in the background once a session is under way; that session keeps the old version until `/reload-plugins` or a new session. `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1` turn plugin auto-update off too, unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
-
-Requires Node 18 or later. CI runs the suite on Linux, macOS and Windows.
+The new version loads in your next session. `DISABLE_AUTOUPDATER=1` or `DISABLE_UPDATES=1` turn plugin auto-update off too, unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`.
 
 ### Setting up by hand
 
