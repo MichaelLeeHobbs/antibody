@@ -1,6 +1,6 @@
 {
   "name": "antibody",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Catches Claude's own tool failures, stalls and repeat mistakes, hands back known fixes at the moment of failure, and learns rules that stop them recurring.",
   "author": { "name": "Michael Lee Hobbs" },
   "homepage": "https://github.com/MichaelLeeHobbs/antibody",
