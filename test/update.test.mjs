@@ -44,7 +44,7 @@ test('update-check reads the latest version and says what to run', async () => {
   try {
     const { stdout } = await promisify(execFile)(process.execPath, [CLI, 'update-check'], { env, encoding: 'utf8' });
     assert.match(stdout, /antibody 99\.0\.0 is out/);
-    assert.match(stdout, /claude plugin update antibody@antibody/);
+    assert.match(stdout, /\n  claude plugin marketplace update antibody\n  claude plugin update antibody@antibody\n/, 'one command per line, nothing joined');
     assert.match(cli(env, 'doctor').out, /note  antibody 99\.0\.0 is out/);
   } finally {
     server.close();
@@ -90,6 +90,7 @@ test('session start names a newer release in three sessions a day, and stays qui
   assert.match(first.systemMessage, new RegExp(`antibody 99\\.0\\.0 is out \\(you have ${VERSION.replace(/\./g, '\\.')}\\)`));
   assert.equal(first.hookSpecificOutput.hookEventName, 'SessionStart');
   assert.match(first.hookSpecificOutput.additionalContext, /antibody 99\.0\.0 is out[\s\S]*end of your first reply/, 'Claude gets it too, for the desktop app');
+  assert.match(first.systemMessage, /then start a new Claude session:\n  claude plugin marketplace update antibody\n  claude plugin update antibody@antibody\n/, 'the commands one per line, and the restart');
   assert.ok(start(h.env) && start(h.env), 'second and third sessions');
   assert.equal(start(h.env), null, 'told three times today');
   writeState(h, { checkedAt: new Date().toISOString(), latest: '99.0.1', toldVersion: '99.0.0', toldAt: new Date().toISOString(), toldCount: 3 });
@@ -162,7 +163,7 @@ function fakePlugin(h, version, log) {
   return { ...h.env, CLAUDE_PLUGIN_ROOT: root, ANTIBODY_NO_UPDATE_CHECK: '1' };
 }
 
-const LOG = '# Changelog\r\n\r\n## Unreleased\r\n\r\n- next\r\n\r\nBy hand: later.\r\n\r\n## 0.7.0 (2026-12-01)\r\n\r\n- seven\r\n\r\nBy hand: nothing.\r\n\r\n## 0.6.0 (2026-11-10)\r\n\r\n- six\r\n\r\nBy hand: make the review daily.\r\n\r\n## 0.5.0 (2026-11-03)\r\n\r\n- five\r\n\r\nBy hand: nothing.\r\n';
+const LOG = '# Changelog\r\n\r\n## Unreleased\r\n\r\n- next\r\n\r\nBy hand: later.\r\n\r\n## 0.7.0 (2026-12-01)\r\n\r\n- seven\r\n\r\nBy hand: nothing.\r\n\r\n## 0.6.0 (2026-11-10)\r\n\r\n- six\r\n\r\nBy hand: make the review daily. `antibody schedule` shows how.\r\n\r\n## 0.5.0 (2026-11-03)\r\n\r\n- five\r\n\r\nBy hand: nothing.\r\n';
 
 test('what\'s new with a step by hand shows in every session until the person confirms it', () => {
   const h = tempHome();
@@ -171,13 +172,16 @@ test('what\'s new with a step by hand shows in every session until the person co
   writeFileSync(join(h.env.ANTIBODY_HOME, 'events.jsonl'), '');
   for (let i = 0; i < 5; i++) {
     const m = start(env);
-    assert.match(m.systemMessage, /updated to 0\.7\.0 \(from 0\.5\.0\) and needs a step by hand\. 0\.6\.0: make the review daily\./, `session ${i + 1}`);
+    assert.match(m.systemMessage, /^antibody is now 0\.7\.0 and has a step for you \(from 0\.6\.0\): make the review daily\./, `session ${i + 1}`);
+    assert.match(m.systemMessage, /\n  node ".*antibody\.mjs" whats-new --seen\n/, 'the confirm command works in the person\'s own terminal');
+    assert.doesNotMatch(m.systemMessage, /(^|[^/])antibody (whats-new|schedule)/, 'never the bare antibody, which their terminal lacks');
+    assert.match(m.systemMessage, /`node ".*antibody\.mjs" schedule` shows how/, 'the changelog\'s own command too');
     assert.doesNotMatch(m.systemMessage, /later/, 'Unreleased is not a release');
-    assert.match(m.hookSpecificOutput.additionalContext, /only after the person says they've read/);
+    assert.match(m.hookSpecificOutput.additionalContext, /--seen only after they say the step is done/);
   }
-  assert.match(cli(env, 'doctor').out, /note  0\.6\.0 need\(s\) a step by hand/);
+  assert.match(cli(env, 'doctor').out, /note  a step by hand from 0\.6\.0 isn't confirmed yet; to see it: node ".*antibody\.mjs" whats-new/);
   const notes = cli(env, 'whats-new').out;
-  assert.match(notes, /## 0\.7\.0[\s\S]*## 0\.6\.0[\s\S]*whats-new --seen/);
+  assert.match(notes, /## 0\.7\.0[\s\S]*## 0\.6\.0[\s\S]*tell Claude[\s\S]*\n  node ".*antibody\.mjs" whats-new --seen/, 'the person gets a command that works in their own terminal');
   assert.doesNotMatch(notes, /## 0\.5\.0/);
   assert.match(cli(env, 'whats-new', '--all').out, /## 0\.5\.0/);
   const pre = (mode) => hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'antibody whats-new --seen' }, { permission_mode: mode }) });
@@ -202,7 +206,7 @@ test('what\'s new with nothing by hand shows once; a fresh install has nothing t
   assert.equal(cli(env, 'init').code, 0);
   assert.equal(start(env), null, 'init counts as caught up');
   env = fakePlugin(h, '0.8.0', LOG.replace('## Unreleased', '## 0.8.0 (2027-01-01)'));
-  assert.match(start(env).systemMessage, /updated to 0\.8\.0 \(from 0\.7\.0\) and needs a step by hand\. 0\.8\.0: later\./);
+  assert.match(start(env).systemMessage, /^antibody is now 0\.8\.0 and has a step for you: later\.\n/);
   h.done();
 });
 
