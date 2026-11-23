@@ -43,4 +43,4 @@ A long run can do the work and still look stuck: the person checks the task list
 | The review (unattended) | issues, data rules and their states, `learned.md`, its review file, and through `apply` (tested, rolled back on failure) local guards and helpers in `~/.claude/bin` |
 | A person | packs (by release), settings, permissions, `~/.claude/CLAUDE.md` |
 
-`core` rules enforce the bottom row against shell writes too, since permission deny rules cover only the file tools.
+`core` rules enforce the bottom row for `CLAUDE.md` patches against shell writes too, since permission deny rules cover only the file tools. Settings and permissions are Claude Code's to guard; the opt-in `protect-settings` pack adds an ask for anyone who wants antibody in front of them as well. In auto mode an ask steps aside for Claude Code's own permission checks.

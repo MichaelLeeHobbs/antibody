@@ -48,6 +48,16 @@ test('heredocs() finds one inside $(...)', () => {
   assert.equal(h[0].body, 'Fix it');
 });
 
+test('heredocs() knows a quoted delimiter, which keeps the body literal', () => {
+  const q = (c) => heredocs(c).map((h) => [h.delim, h.quoted]);
+  assert.deepEqual(q("cat <<'EOF'\nx\nEOF"), [['EOF', true]]);
+  assert.deepEqual(q('cat <<"EOF"\nx\nEOF'), [['EOF', true]]);
+  assert.deepEqual(q('cat <<\\EOF\nx\nEOF'), [['EOF', true]]);
+  assert.deepEqual(q('cat <<EOF\nx\nEOF'), [['EOF', false]]);
+  assert.deepEqual(q('cat <<-EOF\n\tx\n\tEOF'), [['EOF', false]]);
+  assert.deepEqual(names('cat <<\\EOF\nrm -rf /\nEOF\nls'), ['cat', 'ls']);
+});
+
 test('words, redirects, assignments and names', () => {
   const [st] = stages(`FOO=1 C:/tools/twg.exe jira workitem get MED-1 --id "a b" > "out file.txt" 2>&1`);
   assert.equal(st.name, 'twg');

@@ -13,7 +13,7 @@ const { compile, evaluate, loadRules, makeContext, testRule } = await import('..
 const ctx = (command, tool = 'Bash', extra = {}) => makeContext({ tool, input: { command }, cwd: '/repo', platform: 'linux', ...extra });
 
 test('every shipped rule passes its own cases', async () => {
-  const { rules, errors } = await loadRules({ packs: ['core', 'git-bash-windows', 'windows-orphans'], rulesDir: null, guardsDir: null });
+  const { rules, errors } = await loadRules({ packs: ['core', 'git-bash-windows', 'windows-orphans', 'protect-settings'], rulesDir: null, guardsDir: null });
   assert.deepEqual(errors, []);
   assert.ok(rules.length >= 10);
   for (const r of rules) {

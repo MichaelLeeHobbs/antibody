@@ -20,7 +20,7 @@ antibody is a Claude Code plugin that gives Claude an immune system for its own 
 |---|---|
 | **Capture** 🔬 | Hooks log every failed tool call, interrupted call, killed background task and slow call to an event log. Sessions don't do any bookkeeping themselves. When a session commits, pushes, opens a PR or moves a card while its task list has sat unchanged for 15 minutes, it is reminded to update the list, so the progress you check isn't stuck on step one. |
 | **Recall** 🧠 | When a call fails and the failure matches a known issue, antibody hands the fix straight back to the model in the same turn. That works in subagents too. |
-| **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person (refused outright when no one would see the question, as in auto mode), or **warn**. |
+| **Prevent** 🛡️ | Before a shell command runs, rules can **rewrite** it (a certain, mechanical fix), **deny** it (naming the right form), **ask** the person (in auto mode antibody steps aside and leaves the call to Claude Code's own permission checks; in modes that never check, the ask is refused), or **warn**. |
 | **Learn** 📚 | A review command turns recent events, the "what worked next" pairs and session notes into issues and new rules. |
 | **Tolerate** 🧘 | New rules start in **shadow** mode: they log what they would have done, and act only once real traffic shows they're right. Rules that misfire get demoted, because an immune system that attacks the host is called an autoimmune disease. |
 
@@ -39,7 +39,7 @@ You need Claude Code and Node 18 or later (CI runs the suite on Linux, macOS and
 
 2. **Start a new Claude session and run `/antibody:setup`.** The CLI and the desktop app's Code tab both work; they share `~/.claude`. Setup creates the data folder, checks the install, and gives you one command.
 
-3. **Run that command in your own terminal.** It looks like `node "<plugin folder>/bin/antibody.mjs" permissions --apply`. It backs up `~/.claude/settings.json` and `~/.claude/CLAUDE.md`, then adds antibody's permission entries and the line that loads its learned rules. It only adds, never removes or changes your entries. It's yours to run because a Claude session never changes its own settings: if one tries, antibody asks you first, and refuses in auto mode.
+3. **Run that command in your own terminal.** It looks like `node "<plugin folder>/bin/antibody.mjs" permissions --apply`. It backs up `~/.claude/settings.json` and `~/.claude/CLAUDE.md`, then adds antibody's permission entries and the line that loads its learned rules. It only adds, never removes or changes your entries. It's yours to run because it changes your own settings: Claude Code's permission flow decides whether a session may do that (the opt-in `protect-settings` pack adds an antibody ask on top).
 
 Then schedule the review daily: in the desktop app, a scheduled task with the prompt `/antibody:review`; otherwise `antibody schedule` prints an OS task. If the review hasn't run for two days, antibody reminds you.
 
@@ -94,9 +94,10 @@ The new version loads in your next session. `DISABLE_AUTOUPDATER=1` or `DISABLE_
 
 | Pack | What it does |
 |---|---|
-| `core` (always on) | Protects antibody and your settings: a session can't edit `settings.json` (asks you; reading it is fine), the plugin's files, the event log or local guards, disable the plugin, file a bug report, or confirm an update's what's-new notice without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
-| `git-bash-windows` | For Windows with Git Bash: refuses heredocs and inline `node -e` holding backticks, backslashes or `${`, and `sed -i` (misses on CRLF checkouts). Rewrites `tail -5 a b` to `tail -n 5 a b`. |
+| `core` (always on) | Protects antibody itself: a session can't edit the plugin's files, the event log or local guards, disable the plugin, file a bug report, or confirm an update's what's-new notice without you. Edits to the plugin's files and the event log are refused outright; the rest ask you, which in auto mode means a warning and Claude Code's own permission checks decide. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
+| `git-bash-windows` | For Windows with Git Bash: refuses the forms bash really mangles: a heredoc with an unquoted delimiter whose body holds backticks, backslashes or `${`; an inline `node -e` with a backtick or `${` outside single quotes; and a `sed -i` whose pattern uses a `$` anchor or spans lines (misses on CRLF checkouts). Warns on an unquoted heredoc that writes a file. Rewrites `tail -5 a b` to `tail -n 5 a b`. |
 | `windows-orphans` | After a background task is stopped on Windows, it names node processes still holding a port. |
+| `protect-settings` (opt-in) | Asks you before a session edits `settings.json` or `settings.local.json`, or runs `permissions --apply` (reading is fine). This is access control rather than a failure rule, and Claude Code's own permission flow already covers it, so it's off unless you add it. |
 
 Turn packs on in `config.json` (`"packs": ["git-bash-windows"]`). Switch any single shipped rule with `antibody rule demote|retire <id>`.
 
@@ -176,7 +177,7 @@ antibody only fixes Claude's own failures. When something is really a bug in you
 
 ## Reporting a problem with antibody
 
-If antibody gets something wrong (a rule that misfires, a hook error, a confusing message), ask Claude to report it, or run `/antibody:bug`. Claude drafts the issue with `antibody bug`, which adds your antibody version, OS, packs and `doctor` output and takes out your home folder and anything that looks like a secret. Then it shows you the whole draft. Nothing is filed until you've read it and said yes. It's filed as a public issue on this repo with your own `gh` login, and antibody asks you once more before `gh` runs (in auto mode it refuses, and hands you the command instead). Without `gh`, you get the draft to paste at [github.com/MichaelLeeHobbs/antibody/issues/new](https://github.com/MichaelLeeHobbs/antibody/issues/new).
+If antibody gets something wrong (a rule that misfires, a hook error, a confusing message), ask Claude to report it, or run `/antibody:bug`. Claude drafts the issue with `antibody bug`, which adds your antibody version, OS, packs and `doctor` output and takes out your home folder and anything that looks like a secret. Then it shows you the whole draft. Nothing is filed until you've read it and said yes. It's filed as a public issue on this repo with your own `gh` login, and antibody asks you once more before `gh` runs (in auto mode it leaves that to Claude Code's own permission checks, which see that you approved the draft in chat). Without `gh`, you get the draft to paste at [github.com/MichaelLeeHobbs/antibody/issues/new](https://github.com/MichaelLeeHobbs/antibody/issues/new).
 
 ## The review
 
@@ -191,7 +192,7 @@ If antibody gets something wrong (a rule that misfires, a hook error, a confusin
 
 A code patch is a file, `reviews/proposals/<date>-<n>.json`, that the review applies with `antibody apply <date> <n>`. It backs up each file it changes, applies the patch, runs `antibody test` and the patch's own checks (a helper patch must carry one that runs the script and checks its output), and puts the files back if either gets worse. A patch only replaces text it finds exactly once, so a file that changed since the review is refused, not patched in the wrong place. `--dry-run` only shows the diff, and `antibody apply` with no arguments lists the patches and which are applied.
 
-The review asks you only what needs your authority: a permission, security or settings change, a policy decision, or an edit outside antibody's files. A patch to anything else under `~/.claude` (CLAUDE.md, for one) asks you before it runs and refuses in auto mode, and settings, installed plugins and the event log are never patched. Changes to a project repository aren't patches: they go to a session or a card in that project.
+The review asks you only what needs your authority: a permission, security or settings change, a policy decision, or an edit outside antibody's files. A patch to anything else under `~/.claude` (CLAUDE.md, for one) asks you before it runs (in auto mode, Claude Code's own permission checks decide), and settings, installed plugins and the event log are never patched. Changes to a project repository aren't patches: they go to a session or a card in that project.
 
 Event text is treated strictly as data. If the data folder is a git repo, each run is one commit, so `git revert` undoes a bad run.
 
@@ -201,7 +202,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 - antibody fails open: a broken rule or hook lets the call through.
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
-- Changes to settings, the plugin itself, its log and local guards are caught by `core` rules, and so is a session running `antibody apply` on a patch that reaches outside antibody's own files. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
+- Changes to the plugin itself, its log and local guards are caught by `core` rules (settings too, with the opt-in `protect-settings` pack), and so is a session running `antibody apply` on a patch that reaches outside antibody's own files. Plugin and log writes are refused in every mode; the others are asks, so in auto mode they warn and Claude Code's permission checks decide. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
 
 ## Network
@@ -222,7 +223,7 @@ On a clean branch cut from an up-to-date main, run `npm run release -- 0.4.0`. I
 
 - `warn` relies on PreToolUse `additionalContext` reaching the model without a permission decision. The hook docs don't confirm this, so check it in your version.
 - Background-task ids are read from the Bash tool's response text, and the stop tool names checked are `TaskStop`, `KillShell` and `KillBash`. If your version words these differently, a stall is still logged, but without the command that hung.
-- Whether a person will see an `ask` is read from the hook input's `permission_mode`. A Claude Code version that doesn't send it gets the plain `ask`, which in auto mode is settled without a person.
+- Whether a person will see an `ask` is read from the hook input's `permission_mode`. In `auto` an ask makes no decision and reaches the model as a warning; in `bypassPermissions`, `dontAsk` or a mode antibody doesn't know, it becomes a deny. A Claude Code version that doesn't send the mode gets the plain `ask`.
 - `doctor` checks the plugin's files against the release manifest that ships next to them, which catches a partial or local change but not someone who rewrites both. `doctor --online` closes that by comparing the manifest with the one published at the release tag on GitHub. A copy installed from a commit made after the release (Claude Code installs from main, not from the tag) shows its changed files as a note, not a failure.
 - The session-start messages (update and review reminders) go out as the hook's `systemMessage`, which the CLI shows and the desktop app doesn't, and as context Claude passes on. In the desktop app you hear about them only through Claude's first reply.
 

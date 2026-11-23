@@ -51,11 +51,13 @@ function sweep() {
   } catch {}
 }
 
-// An ask reaches a person only in the modes where Claude Code prompts. In auto mode it is settled
-// for them, and bypassPermissions/dontAsk never prompt, so there an ask becomes a deny. A mode this
-// list doesn't know counts as unattended too; with no mode in the input at all, the ask stands.
+// An ask reaches a person only in the modes where Claude Code prompts. Auto mode has its own
+// permission checks, which see the conversation (an approval given in chat, say), so there an ask
+// steps aside: no decision, its message as a warning. bypassPermissions/dontAsk never prompt and
+// have no such check, so there an ask becomes a deny, as it does in a mode this list doesn't know.
+// With no mode in the input at all, the ask stands.
 const ATTENDED = new Set(['default', 'acceptEdits', 'plan']);
-const unattended = (mode) => typeof mode === 'string' && mode !== '' && !ATTENDED.has(mode);
+const unattended = (mode) => typeof mode === 'string' && mode !== '' && mode !== 'auto' && !ATTENDED.has(mode);
 
 async function pre(input) {
   const tool = input.tool_name;
@@ -70,9 +72,10 @@ async function pre(input) {
   const res = evaluate(ctx, rules);
   const mode = input.permission_mode;
   const noPerson = res.decision === 'ask' && unattended(mode);
+  const stepAside = res.decision === 'ask' && mode === 'auto';
   if (real) {
     for (const h of res.hits) {
-      const kind = h.shadow ? 'shadow' : h.action === 'deny' || (h.action === 'ask' && noPerson) ? 'block' : h.action;
+      const kind = h.shadow ? 'shadow' : h.action === 'deny' || (h.action === 'ask' && noPerson) ? 'block' : h.action === 'ask' && stepAside ? 'warn' : h.action;
       append({ kind, session_id: input.session_id, cwd: input.cwd, tool, rule: h.rule.id, action: h.action, mode, command: h.from ?? ctx.command, file: ctx.filePath || undefined, message: h.message, to: h.command });
     }
   }
@@ -82,6 +85,8 @@ async function pre(input) {
     hso.permissionDecisionReason =
       `antibody ${res.reason} This session runs in "${mode}" permission mode, where Claude Code settles an ask without showing it to a person, so antibody refuses it instead. ` +
       "Don't retry it another way: stop and give the person the exact change (the full command, or the file and the edit) so they can make it themselves.";
+  } else if (stepAside) {
+    res.notes.unshift(`antibody ${res.reason} In auto mode antibody leaves this to Claude Code's own permission checks.`);
   } else if (res.decision) {
     hso.permissionDecision = res.decision;
     hso.permissionDecisionReason =
