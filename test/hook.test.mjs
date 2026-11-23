@@ -73,8 +73,9 @@ test('an ask steps aside in auto mode, and becomes a deny where nothing would ch
   const ev = events(h.env).filter((e) => e.rule === 'protect-settings.write');
   assert.deepEqual(ev.map((e) => [e.kind, e.mode]), [
     ['ask', 'default'], ['ask', 'acceptEdits'], ['ask', 'plan'], ['ask', undefined],
-    ['warn', 'auto'], ['block', 'bypassPermissions'], ['block', 'dontAsk'], ['block', 'someFutureMode'], ['warn', 'auto'],
+    ['warn', 'auto'], ['block', 'bypassPermissions'], ['block', 'dontAsk'], ['block', 'someFutureMode'], ['ask', 'auto'],
   ]);
+  // The last one was denied by core.stdin-hang, so the ask never stepped aside and isn't a warn.
   assert.ok(ev.every((e) => e.action === 'ask'), 'the log still names the rule\'s own action');
   h.done();
 });

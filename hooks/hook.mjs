@@ -75,7 +75,7 @@ async function pre(input) {
   const stepAside = res.decision === 'ask' && mode === 'auto';
   if (real) {
     for (const h of res.hits) {
-      const kind = h.shadow ? 'shadow' : h.action === 'deny' || (h.action === 'ask' && noPerson) ? 'block' : h.action === 'ask' && mode === 'auto' ? 'warn' : h.action;
+      const kind = h.shadow ? 'shadow' : h.action === 'deny' || (h.action === 'ask' && noPerson) ? 'block' : h.action === 'ask' && stepAside ? 'warn' : h.action;
       append({ kind, session_id: input.session_id, cwd: input.cwd, tool, rule: h.rule.id, action: h.action, mode, command: h.from ?? ctx.command, file: ctx.filePath || undefined, message: h.message, to: h.command });
     }
   }

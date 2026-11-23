@@ -3,7 +3,9 @@
 // Every refused shape has a file-based alternative, so nothing here leaves the model stuck.
 import { heredocs } from '../../lib/shell.mjs';
 
-const RISKY = /[`\\]|\$\{/; // backtick, backslash, or ${ (template literal / parameter expansion)
+// What bash changes in an unquoted heredoc body: a backtick, `${`, and a backslash before $ ` \ or a
+// newline (any other backslash stays as it is).
+const RISKY = /`|\$\{|\\[$`\\\n]/;
 const INSTEAD =
   ' Instead: write file content with the Write tool and change files with the Edit tool; ' +
   'put a script in a scratchpad .mjs file with Write and run `node <file>`; ' +
@@ -33,7 +35,8 @@ function sedScripts(words) {
   let operand = null;
   for (let k = 0; k < words.length; k++) {
     const m = words[k].masked;
-    if (m === '-e' || m === '--expression') { if (words[k + 1]) out.push(words[++k].text); continue; }
+    // -ne, -Ee: flags ending in e take the script next. Not with i, whose -ie means backup suffix "e".
+    if (m === '-e' || m === '--expression' || /^-[a-hj-zA-Z]+e$/.test(m)) { if (words[k + 1]) out.push(words[++k].text); continue; }
     if (m.startsWith('--expression=')) { out.push(words[k].text.slice('--expression='.length)); continue; }
     if (m === '-f' || m === '--file' || m === '-l' || m === '--line-length') { k++; continue; }
     if (m.startsWith('-') && m !== '-') continue;
@@ -74,10 +77,24 @@ function sedParts(s) {
   return { patterns, commands };
 }
 
+// A `$` anchor that CRLF breaks: unescaped, at the end of the regex or a group/alternative, and not
+// right after `\r` (`s/\r$//` is how CRs get stripped, and works).
+function endAnchor(p) {
+  for (let i = p.indexOf('$'); i >= 0; i = p.indexOf('$', i + 1)) {
+    let slashes = 0;
+    while (p[i - 1 - slashes] === '\\') slashes++;
+    if (slashes % 2) continue;
+    if (!/^(\\?\)|\\?\||$)/.test(p.slice(i + 1))) continue;
+    if (/\\r(\\\?|\*)?$/.test(p.slice(0, i))) continue;
+    return true;
+  }
+  return false;
+}
+
 // CRLF only breaks a match at the end of a line (a `$` anchor) or across lines (`N`, `\n` in a regex).
 function crlfSensitive(script) {
   const { patterns, commands } = sedParts(script);
-  return patterns.some((p) => /(^|[^\\])\$(\\?\)|\\?\||$)/.test(p) || /\\n/.test(p)) || commands.includes('N');
+  return patterns.some((p) => endAnchor(p) || /\\n/.test(p)) || commands.includes('N');
 }
 
 // The command on the heredoc's own line that opens it: `cat > x <<EOF` from `a; cat > x <<EOF`.
@@ -116,8 +133,8 @@ export default [
   {
     ...heredocRule('gbw.heredoc-risky-body', 'A heredoc with an unquoted delimiter whose body contains a backtick, a backslash or `${`, which bash expands before the command sees it. Quote the delimiter (`<<\'EOF\'`) to keep the body literal.', (h) => !h.quoted && RISKY.test(h.body)),
     cases: {
-      fire: ['node - <<EOF\nconst s = `a`;\nEOF', 'git commit -m "$(cat <<EOF\nFix `foo`\nEOF\n)"', 'python - <<EOF\nprint("a\\nb")\nEOF', 'cat <<EOF | sh\necho ${X}\nEOF'],
-      pass: ["node - <<'EOF'\nconst s = `a`;\nEOF", "python - <<'EOF'\nprint('a\\nb')\nEOF", "git commit -m \"$(cat <<'EOF'\nFix `foo`\nEOF\n)\"", 'node - <<"EOF"\nconst s = `${a}`;\nEOF', "git commit -m \"$(cat <<'EOF'\nFix foo, don't drop rows\nEOF\n)\"", 'cat <<EOF\nplain $HOME\nEOF', 'echo $((1 << 2))'],
+      fire: ['node - <<EOF\nconst s = `a`;\nEOF', 'git commit -m "$(cat <<EOF\nFix `foo`\nEOF\n)"', 'python - <<EOF\nprint("C:\\\\Users")\nEOF', 'cat <<EOF | sh\necho ${X}\nEOF'],
+      pass: ['python - <<EOF\nprint("a\\nb")\nEOF', "cat > o <<E'OF'\n`x` \\\\ ${y}\nEOF","node - <<'EOF'\nconst s = `a`;\nEOF", "python - <<'EOF'\nprint('a\\nb')\nEOF", "git commit -m \"$(cat <<'EOF'\nFix `foo`\nEOF\n)\"", 'node - <<"EOF"\nconst s = `${a}`;\nEOF', "git commit -m \"$(cat <<'EOF'\nFix foo, don't drop rows\nEOF\n)\"", 'cat <<EOF\nplain $HOME\nEOF', 'echo $((1 << 2))'],
     },
   },
   {
@@ -161,8 +178,8 @@ export default [
       return null;
     },
     cases: {
-      fire: ["sed -i 's/a$/b/' file.ts", "sed -E -i 's/^(x)$/y/' file.ts", "sed -i.bak -e 's/a/b/' -e 's/ *$//' doc.md", "git grep -l X | xargs sed -i 's/X$/Y/g'", "sed --in-place 'N;s/a\\nb/c/' f", "sed -i '/start/{N;d}' f", "sed -i \"s/x$/y/\" f", "sed -i --expression='s/a$//' f", "sed -i '$!N;s/a/b/' f", "sed -i '/^export default {$/,/^};$/d' f", "sed -i 's|x$|y|; s|a|b|' f", "sed -i 's/\\(a$\\)/b/' f"],
-      pass: ["sed -i 's/a/b\\nc/' f", "sed -i 's/a/cost: $5/' f", "sed -i '/^foo/d' f", "sed -i 's#a\\.b#c#g' x y","sed -i 's/foo/bar/g' some-file.txt", "sed -i 's/toastTitles/toastTexts/g' file.tsx", "sed -i '$d' f", "sed -i \"s/x/${NEW}/\" f", "sed -i 's/Name/Nom/' f", "sed -n '1,5p' file.ts", "sed 's/a$/b/' in.txt > out.txt", 'grep -n "sed -i" notes.md'],
+      fire: ["sed -i 's/a$/b/' file.ts", "sed -E -i 's/^(x)$/y/' file.ts", "sed -i.bak -e 's/a/b/' -e 's/ *$//' doc.md", "git grep -l X | xargs sed -i 's/X$/Y/g'", "sed --in-place 'N;s/a\\nb/c/' f", "sed -i '/start/{N;d}' f", "sed -i \"s/x$/y/\" f", "sed -i --expression='s/a$//' f", "sed -i '$!N;s/a/b/' f", "sed -i '/^export default {$/,/^};$/d' f", "sed -i 's|x$|y|; s|a|b|' f", "sed -i 's/\\(a$\\)/b/' f", "sed -i 's/a\\\\$/b/' f", "sed -i -n -ne 's/a$//p' f"],
+      pass: ["sed -i 's/\\r$//' f.txt", "sed -i 's/\\r\\?$//' f.txt", "sed -i 's/a\\$/b/' f","sed -i 's/a/b\\nc/' f", "sed -i 's/a/cost: $5/' f", "sed -i '/^foo/d' f", "sed -i 's#a\\.b#c#g' x y","sed -i 's/foo/bar/g' some-file.txt", "sed -i 's/toastTitles/toastTexts/g' file.tsx", "sed -i '$d' f", "sed -i \"s/x/${NEW}/\" f", "sed -i 's/Name/Nom/' f", "sed -n '1,5p' file.ts", "sed 's/a$/b/' in.txt > out.txt", 'grep -n "sed -i" notes.md'],
     },
   },
   {

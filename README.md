@@ -94,7 +94,7 @@ The new version loads in your next session. `DISABLE_AUTOUPDATER=1` or `DISABLE_
 
 | Pack | What it does |
 |---|---|
-| `core` (always on) | Protects antibody itself: a session can't edit the plugin's files, the event log or local guards, disable the plugin, file a bug report, or confirm an update's what's-new notice without you. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
+| `core` (always on) | Protects antibody itself: a session can't edit the plugin's files, the event log or local guards, disable the plugin, file a bug report, or confirm an update's what's-new notice without you. Edits to the plugin's files and the event log are refused outright; the rest ask you, which in auto mode means a warning and Claude Code's own permission checks decide. Refuses commands that would hang reading stdin (`grep pattern` with no file, `sort -u` with nothing piped in). |
 | `git-bash-windows` | For Windows with Git Bash: refuses the forms bash really mangles: a heredoc with an unquoted delimiter whose body holds backticks, backslashes or `${`; an inline `node -e` with a backtick or `${` outside single quotes; and a `sed -i` whose pattern uses a `$` anchor or spans lines (misses on CRLF checkouts). Warns on an unquoted heredoc that writes a file. Rewrites `tail -5 a b` to `tail -n 5 a b`. |
 | `windows-orphans` | After a background task is stopped on Windows, it names node processes still holding a port. |
 | `protect-settings` (opt-in) | Asks you before a session edits `settings.json` or `settings.local.json`, or runs `permissions --apply` (reading is fine). This is access control rather than a failure rule, and Claude Code's own permission flow already covers it, so it's off unless you add it. |
@@ -202,7 +202,7 @@ Run it unattended with `--permission-mode acceptEdits` from the data folder, nev
 
 - antibody fails open: a broken rule or hook lets the call through.
 - A rewrite returns `updatedInput` without a permission decision, so your normal permission rules and prompts still apply to the rewritten command.
-- Changes to the plugin itself, its log and local guards are caught by `core` rules (settings too, with the opt-in `protect-settings` pack), and so is a session running `antibody apply` on a patch that reaches outside antibody's own files. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
+- Changes to the plugin itself, its log and local guards are caught by `core` rules (settings too, with the opt-in `protect-settings` pack), and so is a session running `antibody apply` on a patch that reaches outside antibody's own files. Plugin and log writes are refused in every mode; the others are asks, so in auto mode they warn and Claude Code's permission checks decide. That covers Bash and PowerShell writes as well as the Edit and Write tools, which permission deny rules alone don't. It's best effort against a determined model, and `doctor` checks the install.
 - Secrets matching common token patterns (and your own `redact` patterns in `config.json`) are removed before anything is logged. The event log stays local; keep it out of git (`init` writes a `.gitignore`).
 
 ## Network
