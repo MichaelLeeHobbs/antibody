@@ -2,7 +2,7 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
-## Unreleased
+## 0.9.0 (2026-11-23)
 
 - **Rules block only what really fails** ([#22](https://github.com/MichaelLeeHobbs/antibody/issues/22)). In the week to 2026-11-23, 296 of 359 blocks came from four `git-bash-windows` rules that matched characters without looking at shell quoting. Almost all of those commands would have worked. Now:
   - **`gbw.heredoc-risky-body` fires only when the delimiter is unquoted.** A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`, `<<E'OF'`) keeps the body literal, and a backslash counts only where bash changes it (before `$`, a backtick, `\` or a newline).
