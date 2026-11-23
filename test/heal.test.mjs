@@ -265,8 +265,11 @@ test('apply runs patches to antibody\'s own files unattended, and asks a person 
   const global = pre('antibody apply 2026-11-05 2', 'default');
   assert.equal(global.permissionDecision, 'ask');
   assert.match(global.permissionDecisionReason, /It changes: ~\/\.claude\/CLAUDE\.md\./);
-  assert.equal(pre('antibody apply 2026-11-05 2', 'auto').permissionDecision, 'deny');
-  assert.equal(pre('antibody apply 2026-11-05 3', 'auto').permissionDecision, 'deny', 'a path that climbs out of bin/');
+  const auto = pre('antibody apply 2026-11-05 2', 'auto');
+  assert.equal(auto.permissionDecision, undefined, 'auto mode leaves it to Claude Code\'s own checks');
+  assert.match(auto.additionalContext, /It changes: ~\/\.claude\/CLAUDE\.md\./);
+  assert.equal(pre('antibody apply 2026-11-05 2', 'dontAsk').permissionDecision, 'deny');
+  assert.equal(pre('antibody apply 2026-11-05 3', 'dontAsk').permissionDecision, 'deny', 'a path that climbs out of bin/');
   assert.equal(pre('antibody apply 2026-11-05 9', 'default').permissionDecision, 'ask', 'a proposal that isn\'t there');
   assert.equal(pre('antibody apply 2026-11-05 2 --dry-run', 'auto'), null);
   assert.equal(pre('antibody apply', 'auto'), null);

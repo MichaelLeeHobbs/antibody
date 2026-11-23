@@ -56,7 +56,8 @@ const HELP = `antibody: learn from Claude's own tool failures and stop them recu
                                         draft a bug report about antibody itself, with your
                                         version and setup; home paths and secrets are taken out
   bug --submit <file> --title <title>   file the draft on GitHub with gh. A person asks for this;
-                                        antibody asks them before it runs and refuses in auto mode
+                                        antibody asks them before it runs (in auto mode,
+                                        Claude Code's own permission checks decide)
   note [<event id>] <text...>           record what fixed (or caused) a failure, stall or block
   issues [--all]                        every issue with its computed status
   issue show <id>                       one issue in full

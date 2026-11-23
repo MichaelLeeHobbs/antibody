@@ -149,7 +149,8 @@ test('bug drafts a report without home paths, and submit needs a title and a per
   assert.doesNotMatch(draft, /test-session/, 'no session id');
   assert.match(cli(h.env, 'bug', '--submit', out).err, /--title/);
   const pre = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `antibody bug --submit ${out} --title x` }, { permission_mode: 'auto' }) });
-  assert.equal(pre.permissionDecision, 'deny', 'no person in auto mode');
+  assert.equal(pre.permissionDecision, undefined, 'auto mode leaves it to Claude Code, which sees the approval in chat');
+  assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `antibody bug --submit ${out} --title x` }, { permission_mode: 'dontAsk' }) }).permissionDecision, 'deny');
   assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `antibody bug --submit ${out} --title x` }, { permission_mode: 'default' }) }).permissionDecision, 'ask');
   h.done();
 });
@@ -185,7 +186,8 @@ test('what\'s new with a step by hand shows in every session until the person co
   assert.doesNotMatch(notes, /## 0\.5\.0/);
   assert.match(cli(env, 'whats-new', '--all').out, /## 0\.5\.0/);
   const pre = (mode) => hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'antibody whats-new --seen' }, { permission_mode: mode }) });
-  assert.equal(pre('auto').permissionDecision, 'deny', 'no person in auto mode');
+  assert.equal(pre('auto').permissionDecision, undefined, 'auto mode leaves it to Claude Code');
+  assert.equal(pre('bypassPermissions').permissionDecision, 'deny', 'no check at all');
   assert.equal(pre('default').permissionDecision, 'ask');
   assert.match(cli(env, 'whats-new', '--seen').out, /Marked antibody 0\.7\.0/);
   assert.equal(start(env), null, 'confirmed');

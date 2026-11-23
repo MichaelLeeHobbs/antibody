@@ -2,6 +2,19 @@
 
 Claude Code notices an update only when the version changes, so every release bumps `version` in both `package.json` and `.claude-plugin/plugin.json` (`npm run release -- <x.y.z>` does it). "By hand" lists anything you need to do after updating; when it is empty, update and restart Claude Code.
 
+## Unreleased
+
+- **Rules block only what really fails** ([#22](https://github.com/MichaelLeeHobbs/antibody/issues/22)). In one week, 288 of 347 blocks came from four `git-bash-windows` rules that matched characters without looking at shell quoting. Almost all of those commands would have worked. Now:
+  - **`gbw.heredoc-risky-body` fires only when the delimiter is unquoted.** A quoted delimiter (`<<'EOF'`, `<<"EOF"`, `<<\EOF`) keeps the body literal.
+  - **`gbw.heredoc-writes-file` allows a quoted-delimiter heredoc and only warns on an unquoted one.** It no longer denies.
+  - **`gbw.sed-in-place` fires only when a pattern uses a `$` anchor or works across lines** (`N`, `\n` in a regex). `sed -i 's/foo/bar/g' f` passes. A `\n` in the replacement and the `$` last-line address don't count.
+  - **`gbw.node-eval-risky` fires only on a backtick or `${` outside single quotes** in the `-e`/`-p` script. Single-quoted scripts, and `\n` inside double quotes, pass.
+  - Replayed over that week's log, 72 of its 359 blocks would still fire. Those 72 are hangs, unbounded loops, `$`-anchored `sed -i` edits on CRLF files and known tool misuse.
+- **In auto mode an ask steps aside instead of denying.** Auto mode is Claude Code's default now. antibody turned every ask into a deny there, so an ask rule never let anything through, even after you approved the action in chat. Now an ask in auto mode makes no decision: its message reaches Claude as a warning, and Claude Code's own permission checks decide. It is logged as `warn`. In `bypassPermissions`, `dontAsk` and modes antibody doesn't know, an ask is still refused.
+- **Settings protection is an opt-in pack.** `core.protect-settings` came from no recorded failure, and Claude Code's permission flow already covers settings edits. It is now `protect-settings.write` in the new `protect-settings` pack, off by default. `"protect": { "settings": ... }` in `config.json` still picks ask or deny when the pack is on. To keep antibody asking before settings edits, add `"protect-settings"` to `packs` in `config.json`.
+
+By hand: nothing.
+
 ## 0.8.0 (2026-11-10)
 
 - **The review fixes things itself and no longer hands you commands.** Its proposals asked you to decide on fixes for tools you may never use ("make twg-json print query results in one shape"). Now:

@@ -10,6 +10,7 @@ antibody watches tool calls. It logs failures, stalls and blocks by itself. Befo
 ## When antibody speaks
 
 - **A call was blocked.** The message names the right form, so use it. Don't reshape the command to slip past the check. If the rule is wrong for this case, say so in one line with the note command from the message, then do the task another way.
+- **antibody says a call is for the person, and leaves it to Claude Code's permission checks (auto mode).** Go ahead only if the person asked for it or approved it in this conversation; otherwise stop and ask them.
 - **A call was rewritten.** The context says what changed (for example `tail -5 a b` became `tail -n 5 a b`). The rewritten command is what ran.
 - **A failure came back with "Known issue AB-…".** Try that fix first. If it doesn't work, note what did.
 - **You stopped a task and antibody logged a possible stall.** If the task hung or misbehaved, note why it hung. If you stopped it on purpose, note "intended".
@@ -37,7 +38,7 @@ If the person asks to report a problem with antibody (not with their own work), 
 
 ## The review's proposals
 
-The review fixes things itself, code included: it patches local guards and the helper scripts in `~/.claude/bin` with `antibody apply <date> <n>`, which backs the files up, runs `antibody test` and the patch's checks, and undoes the patch if they get worse. Patches live in `reviews/proposals/`. A patch that touches anything else (such as `~/.claude/CLAUDE.md`) needs the person: if you run it, antibody asks them first and refuses in auto mode. Don't edit guards or helpers by hand from a working session; note what you found and the review will fix it.
+The review fixes things itself, code included: it patches local guards and the helper scripts in `~/.claude/bin` with `antibody apply <date> <n>`, which backs the files up, runs `antibody test` and the patch's checks, and undoes the patch if they get worse. Patches live in `reviews/proposals/`. A patch that touches anything else (such as `~/.claude/CLAUDE.md`) needs the person: if you run it, antibody asks them first (in auto mode it warns and leaves the decision to Claude Code's own permission checks, so run it only when the person has said yes). Don't edit guards or helpers by hand from a working session; note what you found and the review will fix it.
 
 ## Updates
 

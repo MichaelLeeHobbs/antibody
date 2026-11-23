@@ -11,7 +11,7 @@ const events = (env) => {
 
 test('PreToolUse: deny, ask, rewrite and allow', () => {
   const h = tempHome();
-  cli(h.env, 'init', '--packs', 'git-bash-windows');
+  cli(h.env, 'init', '--packs', 'git-bash-windows,protect-settings');
   const deny = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'grep -n TODO' }) });
   assert.equal(deny.permissionDecision, 'deny');
   assert.match(deny.permissionDecisionReason, /core\.stdin-hang/);
@@ -24,42 +24,56 @@ test('PreToolUse: deny, ask, rewrite and allow', () => {
   assert.deepEqual(rw.updatedInput, { command: 'tail -n 5 a.log b.log', description: 'd' });
 
   assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'ls -la' }) }), null);
-  assert.deepEqual(events(h.env).map((e) => [e.kind, e.rule]), [['block', 'core.stdin-hang'], ['ask', 'core.protect-settings'], ['rewrite', 'gbw.tail-short-multi']]);
+  assert.deepEqual(events(h.env).map((e) => [e.kind, e.rule]), [['block', 'core.stdin-hang'], ['ask', 'protect-settings.write'], ['rewrite', 'gbw.tail-short-multi']]);
   h.done();
 });
 
-test('an ask becomes a deny where no person would see it (auto, bypassPermissions, dontAsk, unknown modes)', () => {
+test('settings edits pass unless the opt-in protect-settings pack is loaded', () => {
   const h = tempHome();
-  cli(h.env, 'init');
+  cli(h.env, 'init', '--packs', 'git-bash-windows');
+  assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Edit', { file_path: join(h.env.CLAUDE_CONFIG_DIR, 'settings.json'), old_string: 'a', new_string: 'b' }, { permission_mode: 'default' }) }), null);
+  h.done();
+});
+
+test('an ask steps aside in auto mode, and becomes a deny where nothing would check it (bypassPermissions, dontAsk, unknown modes)', () => {
+  const h = tempHome();
+  cli(h.env, 'init', '--packs', 'protect-settings');
   const settings = join(h.env.CLAUDE_CONFIG_DIR, 'settings.json');
   const edit = (mode) => hook(h.env, { hook_event_name: 'PreToolUse', ...call('Edit', { file_path: settings, old_string: 'a', new_string: 'b' }, mode === undefined ? {} : { permission_mode: mode }) });
 
   for (const mode of ['default', 'acceptEdits', 'plan', undefined]) assert.equal(edit(mode).permissionDecision, 'ask', `mode ${mode} keeps the ask`);
-  for (const mode of ['auto', 'bypassPermissions', 'dontAsk', 'someFutureMode']) {
+
+  // Auto mode: no decision, so Claude Code's own permission checks settle it; the message goes to the model.
+  const auto = edit('auto');
+  assert.equal(auto.permissionDecision, undefined, 'auto mode leaves the decision to Claude Code');
+  assert.match(auto.additionalContext, /protect-settings\.write/);
+  assert.match(auto.additionalContext, /Claude Code's own permission checks/);
+
+  for (const mode of ['bypassPermissions', 'dontAsk', 'someFutureMode']) {
     const out = edit(mode);
     assert.equal(out.permissionDecision, 'deny', `mode ${mode} refuses`);
-    assert.match(out.permissionDecisionReason, /core\.protect-settings/);
+    assert.match(out.permissionDecisionReason, /protect-settings\.write/);
     assert.match(out.permissionDecisionReason, new RegExp(`"${mode}" permission mode`));
     assert.match(out.permissionDecisionReason, /give the person the exact change/);
   }
 
-  // The case that slipped through on 2026-11-01: a shell copy over settings.json from an auto-mode session.
-  const cp = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `cp new.json '${settings.replace(/\\/g, '/')}'` }, { permission_mode: 'auto' }) });
-  assert.equal(cp.permissionDecision, 'deny');
-
-  // Every ask rule is covered, not just settings.
-  const dis = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'claude plugin disable antibody' }, { permission_mode: 'auto' }) });
+  // Every ask rule is covered, not just settings: the bug report a person approved in chat goes through in auto mode.
+  const bug = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'antibody bug --submit b.md --title x' }, { permission_mode: 'auto' }) });
+  assert.equal(bug.permissionDecision, undefined);
+  assert.match(bug.additionalContext, /core\.confirm-bug-report/);
+  const dis = hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'claude plugin disable antibody' }, { permission_mode: 'dontAsk' }) });
   assert.equal(dis.permissionDecision, 'deny');
   assert.match(dis.permissionDecisionReason, /core\.plugin-disable/);
 
-  // Plain denies and allows don't change with the mode.
+  // Plain denies and allows don't change with the mode, and a deny still wins over an ask.
   assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'grep -n TODO' }, { permission_mode: 'auto' }) }).permissionDecision, 'deny');
   assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: 'ls -la' }, { permission_mode: 'auto' }) }), null);
+  assert.equal(hook(h.env, { hook_event_name: 'PreToolUse', ...call('Bash', { command: `cp new.json '${settings.replace(/\\/g, '/')}'; grep -n x` }, { permission_mode: 'auto' }) }).permissionDecision, 'deny');
 
-  const ev = events(h.env).filter((e) => e.rule === 'core.protect-settings');
+  const ev = events(h.env).filter((e) => e.rule === 'protect-settings.write');
   assert.deepEqual(ev.map((e) => [e.kind, e.mode]), [
     ['ask', 'default'], ['ask', 'acceptEdits'], ['ask', 'plan'], ['ask', undefined],
-    ['block', 'auto'], ['block', 'bypassPermissions'], ['block', 'dontAsk'], ['block', 'someFutureMode'], ['block', 'auto'],
+    ['warn', 'auto'], ['block', 'bypassPermissions'], ['block', 'dontAsk'], ['block', 'someFutureMode'], ['warn', 'auto'],
   ]);
   assert.ok(ev.every((e) => e.action === 'ask'), 'the log still names the rule\'s own action');
   h.done();
